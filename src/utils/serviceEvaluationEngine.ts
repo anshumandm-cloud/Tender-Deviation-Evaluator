@@ -15,8 +15,10 @@ import {
   ServiceCriteriaRequirement,
   InternalGuidelines,
   BidderSubmittedDocument,
+  BlacklistedEntity,
 } from "../types/serviceEvaluation";
 import { analyzeDocumentTextForTampering } from "./ocrAndTamperAnalyzer";
+import { DEFAULT_BLACKLISTED_ENTITIES, checkBidderBanningStatus } from "./banningDatabase";
 
 /**
  * Standard Default Guidelines on Shortfall/Clarification in Open Tender (OT) Cases
@@ -52,7 +54,8 @@ export function evaluateBidderEligibility(
   criteria: ServiceCriteriaRequirement,
   packageTitle: string,
   tenderRefNo: string,
-  isRoundTwo: boolean = false
+  isRoundTwo: boolean = false,
+  customBlacklist: BlacklistedEntity[] = DEFAULT_BLACKLISTED_ENTITIES
 ): BidderServiceSubmission {
   const updatedBidder: BidderServiceSubmission = { ...bidder };
 
@@ -193,22 +196,45 @@ export function evaluateBidderEligibility(
     relevantDocumentsCited: expDocs.map((d) => d.name),
   };
 
-  // 4. Banning & Debarment Alert Trigger
+  // 4. Banning & Debarment Alert Trigger (against internal & portal blacklist)
+  const banningCheck = checkBidderBanningStatus(updatedBidder.bidderName, customBlacklist);
   const bidderNameLower = updatedBidder.bidderName.toLowerCase();
-  if (bidderNameLower.includes("black") || bidderNameLower.includes("ban") || bidderNameLower.includes("disqual")) {
+  const keywordFlagged = bidderNameLower.includes("black") || bidderNameLower.includes("ban") || bidderNameLower.includes("disqual");
+
+  if (banningCheck.isAlertTriggered && banningCheck.matchedEntity) {
+    const ent = banningCheck.matchedEntity;
+    updatedBidder.banningStatusAlert = {
+      isAlertTriggered: true,
+      reason: `Flagged on ${ent.sourcePortal}: Match with blacklisted firm '${ent.entityName}' (Order: ${ent.referenceOrderNo}, Date: ${ent.orderDate}). Reason: ${ent.reasonForBanning}`,
+      banningCheckListClauseRef: "NIT Clause 14.1 & GFR 2017 Rule 151 (Debarment from Bidding)",
+      verifiedStatus: "POTENTIALLY_DEBARRED",
+      verificationNotes: `Immediate Alert: Verification required across ${ent.sourcePortal} (${ent.portalUrl || "Portal"}). Reference Order: ${ent.referenceOrderNo}.`,
+      matchedEntityName: ent.entityName,
+      sourceDatabase: ent.sourcePortal,
+      referenceOrderNo: ent.referenceOrderNo,
+      portalUrl: ent.portalUrl,
+      checkedAt: new Date().toISOString(),
+    };
+  } else if (keywordFlagged) {
     updatedBidder.banningStatusAlert = {
       isAlertTriggered: true,
       reason: "Party name flagged against CVC / Central Public Procurement Portal (CPPP) Debarment Database. Requires mandatory verification from GeM Incident Management & Ministry Banning List.",
       banningCheckListClauseRef: "NIT Clause 14.1 & GFR 2017 Rule 151 (Debarment from Bidding)",
       verifiedStatus: "POTENTIALLY_DEBARRED",
       verificationNotes: "Alert active: Dealing Officer must verify banning status on CPPP portal before issuing LOA.",
+      sourceDatabase: "CPPP Central Debarment",
+      checkedAt: new Date().toISOString(),
     };
+  } else if (updatedBidder.banningStatusAlert?.verifiedStatus === "OFFICER_CONFIRMED_CLEAN") {
+    // Preserve manual officer clearance
   } else {
     updatedBidder.banningStatusAlert = {
       isAlertTriggered: false,
       banningCheckListClauseRef: "NIT Clause 14.1 (Non-Banning Undertaking)",
       verifiedStatus: "CLEAN",
-      verificationNotes: "No adverse debarment records found in Central Banning Database as on date of technical scrutiny.",
+      verificationNotes: `Checked against internal blacklist and public portals (CPPP/GeM/CVC). No debarment records found as on ${new Date().toLocaleDateString("en-IN")}.`,
+      sourceDatabase: "All Configured Portals",
+      checkedAt: new Date().toISOString(),
     };
   }
 

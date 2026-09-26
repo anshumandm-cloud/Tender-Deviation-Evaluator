@@ -140,7 +140,11 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={onLoadGenericCase}
-            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-md border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+            className={`px-2.5 py-1.5 text-xs font-medium rounded-md border flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
+              metadata.tenderType === "EPC_TURNKEY" && metadata.packageTitle.includes("Turnkey")
+                ? "bg-cyan-950 text-cyan-200 border-cyan-500/60 font-semibold"
+                : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+            }`}
             title="Load standard generic EPC Works template"
           >
             <Briefcase className="w-3.5 h-3.5 text-cyan-400" />
@@ -150,7 +154,11 @@ export const Header: React.FC<HeaderProps> = ({
           {onLoadServicesCase && (
             <button
               onClick={onLoadServicesCase}
-              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-md border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-md border flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
+                metadata.tenderType === "SERVICES_O_AND_M"
+                  ? "bg-purple-950 text-purple-200 border-purple-500/60 font-semibold"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+              }`}
               title="Load Operations & Maintenance / Services case evaluation"
             >
               <Wrench className="w-3.5 h-3.5 text-purple-400" />

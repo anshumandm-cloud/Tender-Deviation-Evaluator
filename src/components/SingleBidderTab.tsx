@@ -42,7 +42,7 @@ export const SingleBidderTab: React.FC<SingleBidderTabProps> = ({
           No Bidder Deviation Evaluation Generated Yet
         </h3>
         <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
-          Please upload SBD, NIT, and participating bidders' deviation documents in the Tender Setup tab, then click "Run Deviation Analysis".
+          Please upload SBD, NIT, and participating bidders' deviation documents in the Tender Setup tab, then click "Run Evaluation".
         </p>
       </div>
     );
@@ -229,7 +229,7 @@ export const SingleBidderTab: React.FC<SingleBidderTabProps> = ({
         <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-lg">
           <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1.5">
             <ShieldAlert className="w-3.5 h-3.5 text-blue-600" />
-            <span>Executive Contract Dealing Officer Assessment:</span>
+            <span>Executive Dealing Officer Assessment:</span>
           </h4>
           <p className="text-xs text-slate-700 leading-relaxed">{currentEval.executiveSummary}</p>
         </div>

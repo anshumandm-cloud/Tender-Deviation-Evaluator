@@ -233,10 +233,15 @@ With reference to your techno-commercial bid opened against the subject tender, 
     bidderName: "Bidder 3",
     banningStatusAlert: {
       isAlertTriggered: true,
-      reason: "Banning Verification Warning: Similar entity name appeared under scrutiny in Ministry GeM Incident Log for contract abandonment.",
-      banningCheckListClauseRef: "NIT Clause 14 & CVC Debarment Register",
-      verifiedStatus: "UNDER_SCRUTINY",
-      verificationNotes: "Alert for Dealing Officer: Mandatory verification on Central Debarment Portal required before any commercial consideration.",
+      reason: "Flagged on GeM Incident Management: Match with blacklisted firm 'Bidder 3' (Order: GeM/INC/2025/DEBAR-4819, Date: 14-08-2025). Reason: Unilateral abandonment of HVAC & electromechanical facility maintenance contract post-award without statutory intimation.",
+      banningCheckListClauseRef: "NIT Clause 14.1 & GFR 2017 Rule 151 (Debarment from Bidding)",
+      verifiedStatus: "POTENTIALLY_DEBARRED",
+      verificationNotes: "Alert for Dealing Officer: Mandatory verification on GeM Incident Management Portal and CPPP Central Debarment Portal required before any commercial consideration.",
+      matchedEntityName: "Bidder 3",
+      sourceDatabase: "GeM Incident Management",
+      referenceOrderNo: "GeM/INC/2025/DEBAR-4819",
+      portalUrl: "https://gem.gov.in/incident-management",
+      checkedAt: "2026-09-26T10:00:00Z",
     },
     turnoverDocuments: [
       {
@@ -326,5 +331,54 @@ Your bid has been evaluated by the designated Tender Evaluation Committee strict
       ],
       appellateAuthorityMention: "General Manager (Contracts) / Appellate Authority as per NIT Dispute Resolution Clause",
     },
+  },
+];
+
+export const BLANK_SERVICES_CRITERIA: ServiceCriteriaRequirement = {
+  minAverageAnnualTurnoverCr: 0,
+  turnoverYearsCount: 3,
+  turnoverNotes: "Audited Balance Sheets and CA Turnover Certificate with mandatory 18-digit UDIN.",
+  netWorthRequirement: "Positive Net Worth as on last audited financial year.",
+  similarWorkDefinition: "",
+  singleWorkOrderValueCr: 0,
+  twoWorkOrdersValueCr: 0,
+  threeWorkOrdersValueCr: 0,
+  priorExperienceYears: 7,
+  mandatoryCertifications: [
+    "EPF & ESI Registration Certificates",
+    "Valid Statutory Licenses / Registrations",
+    "GSTIN Registration Certificate",
+  ],
+};
+
+export const BLANK_SERVICE_BIDDERS: BidderServiceSubmission[] = [
+  {
+    bidderId: "srv-bidder-1",
+    bidderName: "Bidder 1",
+    banningStatusAlert: {
+      isAlertTriggered: false,
+      banningCheckListClauseRef: "NIT Clause 14 (Non-Banning Undertaking)",
+      verifiedStatus: "CLEAN",
+      verificationNotes: "Self-undertaking verified.",
+    },
+    turnoverDocuments: [],
+    experienceDocuments: [],
+    financialEvaluation: {
+      claimedTurnoverByYear: [],
+      averageTurnoverCr: 0,
+      requiredTurnoverCr: 0,
+      status: "SHORTFALL",
+      reasons: ["No turnover documents uploaded."],
+      relevantDocumentsCited: [],
+    },
+    experienceEvaluation: {
+      submittedWorks: [],
+      status: "SHORTFALL",
+      reasons: ["No experience certificates uploaded."],
+      relevantDocumentsCited: [],
+    },
+    round: 1,
+    overallStatus: "SHORTFALL_REQUIRED",
+    summaryReason: "Awaiting submission of financial and technical eligibility documents.",
   },
 ];

@@ -46,6 +46,17 @@ export interface DocumentTamperingAlert {
   officerDecisionNotes?: string;
 }
 
+export interface BlacklistedEntity {
+  id: string;
+  entityName: string;
+  sourcePortal: "Internal Blacklist" | "GeM Incident Management" | "CPPP Central Debarment" | "CVC Banned Register" | "Custom URL / Portal";
+  referenceOrderNo: string;
+  orderDate: string;
+  banPeriodYears: number;
+  reasonForBanning: string;
+  portalUrl?: string;
+}
+
 export interface BidderServiceSubmission {
   bidderId: string;
   bidderName: string;
@@ -55,6 +66,11 @@ export interface BidderServiceSubmission {
     banningCheckListClauseRef: string; // e.g. "NIT Clause 14 & CVC Debarment Register"
     verifiedStatus: "CLEAN" | "UNDER_SCRUTINY" | "POTENTIALLY_DEBARRED" | "OFFICER_CONFIRMED_CLEAN";
     verificationNotes?: string;
+    matchedEntityName?: string;
+    sourceDatabase?: string;
+    referenceOrderNo?: string;
+    portalUrl?: string;
+    checkedAt?: string;
   };
   
   // Documents

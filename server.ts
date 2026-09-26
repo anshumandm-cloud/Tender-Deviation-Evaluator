@@ -38,7 +38,7 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-const PSU_CONTRACT_OFFICER_SYSTEM_PROMPT = `You are a Chief Contract Dealing Officer in a Public Sector Undertaking (PSU) / Public Procurement Contracts Division, operating the Tender Evaluation Tool for Turnkey / EPC Works and Non-Consultancy / Operations & Maintenance (O&M) Services contracts.
+const PSU_CONTRACT_OFFICER_SYSTEM_PROMPT = `You are a Chief Dealing Officer in a Public Sector Undertaking (PSU) / Public Procurement Contracts Division, operating the Tender Evaluation Tool for Turnkey / EPC Works and Non-Consultancy / Operations & Maintenance (O&M) Services contracts.
 Your reference documents are the Standard Bidding Document (SBD), General Conditions of Contract (GCC), Special Conditions of Contract (SCC), Notice Inviting Tender (NIT), Instructions to Bidders (ITB), CVC Procurement Guidelines, GFR 2017 Rules (Rules 144, 161, 173), and the Policy Circular on Shortfall/Clarification in Open Tender (OT) Cases.
 Your primary role and principles:
 1. Buyer's Interest is Paramount:
@@ -549,7 +549,7 @@ app.post("/api/evaluate-single-bidder", async (req, res) => {
       ? `\nSPECIAL DEALING OFFICER DIRECTIVES & CLARIFICATIONS (MANDATORY INSTRUCTIONS):\n${officerDirectives.map((d: any, i: number) => `${i + 1}. ${typeof d === "string" ? d : `${d.title}: ${d.instruction}`}`).join("\n")}\nCRITICAL: You MUST incorporate and prioritize the Dealing Officer's directives above into the counter-proposals and recommended actions!\n`
       : "";
 
-    const prompt = `Perform a comprehensive Contract Dealing Officer Evaluation for the following bidder's quoted deviations against the tender terms:
+    const prompt = `Perform a comprehensive Dealing Officer Evaluation for the following bidder's quoted deviations against the tender terms:
 
 TENDER / PACKAGE: ${packageTitle || "Turnkey EPC Tender"}
 BIDDER NAME: ${bidderName || "Bidder"}
@@ -742,7 +742,7 @@ app.post("/api/suggest-reviewed-clauses", async (req, res) => {
       ? `\nDEALING OFFICER REQUIRED FORMAT / TEMPLATE:\nFormat Title: ${customFormat.name}\n${customFormat.templateText ? `Template Guidelines: ${customFormat.templateText.slice(0, 3000)}` : ""}\nCRITICAL: Format the draft addendum preamble and overview following this template strictly.\n`
       : "";
 
-    const prompt = `As a PSU Senior Contract Dealing Officer, formulate Reviewed / Harmonized Contract Clauses for contentious clauses where deviations remain unresolved despite multiple rounds of discussions:
+    const prompt = `As a PSU Senior Dealing Officer, formulate Reviewed / Harmonized Contract Clauses for contentious clauses where deviations remain unresolved despite multiple rounds of discussions:
 
 TENDER PACKAGE: ${packageTitle || "Turnkey EPC Tender"}
 ${directivesContext}
@@ -819,7 +819,7 @@ app.post("/api/chat", async (req, res) => {
       ? `Active Dealing Officer Format Template: ${activeFormat.name}`
       : "Standard PSU Corrigendum Format.";
 
-    const prompt = `You are the Contract Dealing Officer's trusted Senior Procurement & Legal Contract Advisor for PSU Turnkey / EPC tenders (Standard SBD, GCC/SCC, NIT/ITB, CVC Guidelines).
+    const prompt = `You are the Dealing Officer's trusted Senior Procurement & Legal Contract Advisor for PSU Turnkey / EPC tenders (Standard SBD, GCC/SCC, NIT/ITB, CVC Guidelines).
 
 ACTIVE TENDER CONTEXT:
 Package: ${contextData?.packageTitle || "Turnkey EPC Package"}
@@ -996,7 +996,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Contract Dealing Officer Evaluation Server running on port ${PORT}`);
+    console.log(`Dealing Officer Evaluation Server running on port ${PORT}`);
   });
 }
 

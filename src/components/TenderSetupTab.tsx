@@ -35,10 +35,6 @@ interface TenderSetupTabProps {
   onRunEvaluation: () => void;
   isEvaluating: boolean;
   evaluationStep: string;
-  onLoadGenericCase?: () => void;
-  onLoadServicesCase?: () => void;
-  onNewBlankCase?: () => void;
-  onLoadSample?: () => void;
   onLogAudit?: (
     action: string,
     category: AuditCategory,
@@ -59,10 +55,6 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
   onRunEvaluation,
   isEvaluating,
   evaluationStep,
-  onLoadGenericCase,
-  onLoadServicesCase,
-  onNewBlankCase,
-  onLoadSample,
   onLogAudit,
 }) => {
   const [sbdParseError, setSbdParseError] = useState<string | null>(null);
@@ -313,67 +305,6 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
         </div>
       )}
 
-      {/* Universal Case Mode Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-xl border border-slate-800 p-4 text-white shadow-sm flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-cyan-900/80 text-cyan-200 border border-cyan-500/40">
-              Universal Case Mode
-            </span>
-            <h2 className="text-sm font-bold text-white">
-              Adaptable Tender Deviation Evaluator (Works for Any Case)
-            </h2>
-          </div>
-          <p className="text-xs text-slate-300 mt-1 max-w-2xl">
-            This system evaluates deviations quoted by bidders against contract clauses for Turnkey, EPC, and Works packages across any Public Sector Organization or Department. Simply configure the parameters and documents below.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {onNewBlankCase && (
-            <button
-              type="button"
-              onClick={onNewBlankCase}
-              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ New Blank Case</span>
-            </button>
-          )}
-          {onLoadGenericCase && (
-            <button
-              type="button"
-              onClick={onLoadGenericCase}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-200 text-xs font-medium rounded-lg border border-slate-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
-              title="Standard Turnkey EPC & Project Construction Case"
-            >
-              <Layers className="w-3.5 h-3.5 text-cyan-400" />
-              <span>EPC / Turnkey Works</span>
-            </button>
-          )}
-          {onLoadServicesCase && (
-            <button
-              type="button"
-              onClick={onLoadServicesCase}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-purple-200 text-xs font-medium rounded-lg border border-slate-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
-              title="Operations & Maintenance (O&M) / Services Case"
-            >
-              <Wrench className="w-3.5 h-3.5 text-purple-400" />
-              <span>Services / O&amp;M Case</span>
-            </button>
-          )}
-          {onLoadSample && (
-            <button
-              type="button"
-              onClick={onLoadSample}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-200 text-xs font-medium rounded-lg border border-slate-700 shadow-sm transition-all cursor-pointer"
-            >
-              Load Sample Demo
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Tender Details Banner */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
@@ -556,14 +487,16 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* SBD Upload Card */}
+          {/* SBD / SLA Upload Card */}
           <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-blue-600" />
                   <span className="text-sm font-semibold text-slate-800">
-                    Standard Bidding Document (SBD)
+                    {metadata.tenderType === "SERVICES_O_AND_M"
+                      ? "Service Contract & SLA Document"
+                      : "Standard Bidding Document (SBD)"}
                   </span>
                 </div>
                 {documents.sbdText ? (
@@ -576,7 +509,9 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-500 mb-3">
-                General &amp; Special Conditions of Contract (GCC/SCC), clauses on LD, PBG, Payment Terms, Risk &amp; Cost, Limitation of Liability.
+                {metadata.tenderType === "SERVICES_O_AND_M"
+                  ? "Service Level Agreement (SLA), General & Special Conditions of Contract, Minimum Wage escalation, PBG, and penalty clauses."
+                  : "General & Special Conditions of Contract (GCC/SCC), clauses on LD, PBG, Payment Terms, Risk & Cost, Limitation of Liability."}
               </p>
 
               {documents.sbdName && (
@@ -662,7 +597,9 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
                 <div className="flex items-center gap-2">
                   <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
                   <span className="text-sm font-semibold text-slate-800">
-                    Notice Inviting Tender (NIT) &amp; ITB
+                    {metadata.tenderType === "SERVICES_O_AND_M"
+                      ? "Notice Inviting Tender (NIT) & Qualifying Criteria"
+                      : "Notice Inviting Tender (NIT) & ITB"}
                   </span>
                 </div>
                 {documents.nitText ? (
@@ -675,7 +612,9 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-500 mb-3">
-                Instruction to Bidders, Qualifying Requirements (PQC), deviation submission guidelines (Annexure IV &amp; V), timelines.
+                {metadata.tenderType === "SERVICES_O_AND_M"
+                  ? "NIT Scope, Qualifying Requirements (Turnover, Similar Work 80%/50%/40% thresholds), non-banning undertakings, and statutory registrations."
+                  : "Instruction to Bidders, Qualifying Requirements (PQC), deviation submission guidelines (Annexure IV & V), timelines."}
               </p>
 
               {documents.nitName && (
@@ -947,7 +886,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
             </span>
           </div>
           <h3 className="text-lg font-bold">
-            Initiate Contract Dealing Officer Evaluation
+            Initiate Dealing Officer Evaluation
           </h3>
           <p className="text-xs text-blue-100 max-w-2xl">
             Processes all submitted deviations against SBD &amp; NIT clauses. Generates individual bidder evaluations, consolidated comparative matrix, deadlock resolution recommendations, and Word/Excel outputs.
@@ -969,7 +908,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
           ) : (
             <>
               <Play className="w-4 h-4 fill-current" />
-              <span>Run Deviation Analysis</span>
+              <span>Run Evaluation</span>
               <ArrowRight className="w-4 h-4 ml-1" />
             </>
           )}

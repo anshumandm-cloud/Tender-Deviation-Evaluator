@@ -254,8 +254,8 @@ export const SERVICES_TENDER_METADATA: TenderMetadata = {
 };
 
 export const SERVICES_SAMPLE_DOCUMENTS: TenderDocuments = {
-  sbdName: "SBD_Services_O&M_GCC_SCC.docx",
-  sbdText: `STANDARD BIDDING DOCUMENT (SBD) FOR COMPREHENSIVE OPERATIONS & MAINTENANCE (O&M) SERVICES
+  sbdName: "Services_O&M_GCC_SCC_Contract.docx",
+  sbdText: `COMPREHENSIVE OPERATIONS & MAINTENANCE (O&M) SERVICE CONTRACT - GENERAL & SPECIAL CONDITIONS
 
 CLAUSE 2.0: SERVICE LEVEL AGREEMENT (SLA) & AVAILABILITY
 2.1 Service Provider shall ensure minimum 98.5% uninterrupted system availability on a 24x7x365 basis.
@@ -290,14 +290,14 @@ export const SERVICES_SAMPLE_BIDDERS: BidderInput[] = [
     name: "Bidder 1",
     deviationFileName: "Bidder_1_Deviations_Services.docx",
     deviationFileText: `SCHEDULE OF SERVICE DEVIATIONS & QUALIFICATIONS
-1. Clause Ref: SBD Clause 2.1 & 2.2 - SLA Downtime Penalty
+1. Clause Ref: Service Agreement Clause 2.1 & 2.2 - SLA Downtime Penalty
 Quoted Deviation: Service provider requests SLA availability benchmark of 95% instead of 98.5%. Maximum monthly penalty ceiling to be capped at 5% of monthly bill.
 Justification: Power grid supply fluctuations outside contractor control should not count towards SLA penalty.
 
-2. Clause Ref: SBD Clause 5.1 - Monthly Billing & Payment
+2. Clause Ref: Service Agreement Clause 5.1 - Monthly Billing & Payment
 Quoted Deviation: Payment within 15 days of invoice submission with interest @ 12% p.a. for delayed release. EPF/ESI deposit challans to be submitted within 60 days rather than concurrent with invoice.
 
-3. Clause Ref: SBD Clause 21.1 - Indemnity & Liability
+3. Clause Ref: Service Agreement Clause 21.1 - Indemnity & Liability
 Quoted Deviation: Total aggregate liability for any operational damage or third-party claim to be limited to 3 months of service billing fees.`,
     deviationFileFormat: "docx",
     uploadDate: "2026-09-24",
@@ -307,13 +307,13 @@ Quoted Deviation: Total aggregate liability for any operational damage or third-
     name: "Bidder 2",
     deviationFileName: "Bidder_2_Deviations_Services.pdf",
     deviationFileText: `COMMERCIAL & LEGAL DEVIATIONS
-1. Clause Ref: SBD Clause 9.1 - Management Fee Escalation
+1. Clause Ref: Service Agreement Clause 9.1 - Management Fee Escalation
 Quoted Deviation: Fixed service fee to be subject to annual escalation of 7% per annum to offset overhead and administrative inflation over the 3-year tenure.
 
-2. Clause Ref: SBD Clause 14.1 - Performance Security
+2. Clause Ref: Service Agreement Clause 14.1 - Performance Security
 Quoted Deviation: Proposes deduction of 5% security deposit from monthly running bills instead of upfront Performance Bank Guarantee (PBG).
 
-3. Clause Ref: SBD Clause 22.0 - Exit & Termination Notice
+3. Clause Ref: Service Agreement Clause 22.0 - Exit & Termination Notice
 Quoted Deviation: Mutual termination for convenience with 30 days notice by either party without forfeiture of performance security.`,
     deviationFileFormat: "pdf",
     uploadDate: "2026-09-24",

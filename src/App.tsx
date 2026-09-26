@@ -65,6 +65,8 @@ import {
 import {
   SAMPLE_SERVICES_CRITERIA,
   SAMPLE_SERVICE_BIDDERS,
+  BLANK_SERVICES_CRITERIA,
+  BLANK_SERVICE_BIDDERS,
 } from "./utils/serviceSampleData";
 import { DEFAULT_SHORTFALL_OT_GUIDELINES } from "./utils/serviceEvaluationEngine";
 import {
@@ -387,7 +389,7 @@ export default function App() {
     setConfirmDialog({
       isOpen: true,
       title: "Start New Blank Case?",
-      message: "All current tender metadata, uploaded clauses, and bidder deviations will be cleared to initialize a blank workspace.",
+      message: "All current tender metadata, uploaded clauses, bidder deviations, and service eligibility records will be cleared to initialize a completely clean workspace.",
       confirmLabel: "Initialize Blank Case",
       onConfirm: () => {
         setMetadata(BLANK_TENDER_METADATA);
@@ -397,11 +399,14 @@ export default function App() {
         setSingleEvaluations([]);
         setComparativeEvaluation(null);
         setReviewedClausesData(null);
+        setServiceCriteria(BLANK_SERVICES_CRITERIA);
+        setServiceBidders(BLANK_SERVICE_BIDDERS);
+        setServiceEvaluationStage("ROUND_1_INITIAL");
         setEvaluationError(null);
         logAuditAction(
           "New Blank Case Created",
           "System & Files",
-          "Dealing Officer initialized a fresh blank case for custom document upload and evaluation",
+          "Dealing Officer initialized a fresh blank case for custom document upload and evaluation (EPC and Services data cleared)",
           undefined,
           "System State",
           "Case Reset"
@@ -418,7 +423,7 @@ export default function App() {
     setConfirmDialog({
       isOpen: true,
       title: "Reset Tender Workspace?",
-      message: "Are you sure you want to reset all active documents, deviation matrix, and harmonized clauses?",
+      message: "Are you sure you want to reset all active documents, deviation matrix, harmonized clauses, and Services (O&M) eligibility records?",
       confirmLabel: "Reset Workspace",
       onConfirm: () => {
         setMetadata(BLANK_TENDER_METADATA);
@@ -428,11 +433,14 @@ export default function App() {
         setSingleEvaluations([]);
         setComparativeEvaluation(null);
         setReviewedClausesData(null);
+        setServiceCriteria(BLANK_SERVICES_CRITERIA);
+        setServiceBidders(BLANK_SERVICE_BIDDERS);
+        setServiceEvaluationStage("ROUND_1_INITIAL");
         setEvaluationError(null);
         logAuditAction(
           "Workspace Reset Executed",
           "System & Files",
-          "Dealing Officer cleared all active documents, deviation matrix, and harmonized clauses",
+          "Dealing Officer cleared all active documents, deviation matrix, harmonized clauses, and Services (O&M) data",
           undefined,
           "System State",
           "Re-initialization"
@@ -806,7 +814,15 @@ export default function App() {
         }}
         onReset={handleReset}
         hasActiveData={Boolean(
-          documents.sbdText || singleEvaluations.length || comparativeEvaluation
+          documents.sbdText ||
+          singleEvaluations.length ||
+          comparativeEvaluation ||
+          serviceBidders.some(
+            (b) =>
+              b.turnoverDocuments.length > 0 ||
+              b.experienceDocuments.length > 0 ||
+              (b.financialEvaluation && b.financialEvaluation.averageTurnoverCr > 0)
+          )
         )}
       />
 
@@ -969,10 +985,6 @@ export default function App() {
             onRunEvaluation={handleRunEvaluation}
             isEvaluating={isEvaluating}
             evaluationStep={evaluationStep}
-            onLoadGenericCase={handleLoadGenericCase}
-            onLoadServicesCase={handleLoadServicesCase}
-            onNewBlankCase={handleNewBlankCase}
-            onLoadSample={handleLoadSample}
             onLogAudit={logAuditAction}
           />
         )}
@@ -1464,7 +1476,7 @@ function generateFallbackComparativeEvaluation(
 function generateFallbackReviewedClauses(metadata: TenderMetadata): ReviewedClausesData {
   return {
     packageTitle: metadata.packageTitle || "Enter Case Name",
-    harmonizationOverview: `Where bidders have quoted common deviations that threaten to cause a procurement deadlock or single-tender situation, the Contract Dealing Officer has formulated reviewed and harmonized clauses. These revised clauses grant procedural flexibility in cash flow and liability risk while rigorously safeguarding Employer's legal rights, financial recovery mechanisms, and public procurement vigilance standards.`,
+    harmonizationOverview: `Where bidders have quoted common deviations that threaten to cause a procurement deadlock or single-tender situation, the Dealing Officer has formulated reviewed and harmonized clauses. These revised clauses grant procedural flexibility in cash flow and liability risk while rigorously safeguarding Employer's legal rights, financial recovery mechanisms, and public procurement vigilance standards.`,
     reviewedClauses: [
       {
         clauseNumber: "GCC Clause 27.2",
