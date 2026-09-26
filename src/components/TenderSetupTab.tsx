@@ -15,10 +15,10 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
-  Package,
-  Wrench,
   Layers,
   HelpCircle,
+  Package,
+  Wrench,
 } from "lucide-react";
 import { BidderInput, TenderDocuments, TenderMetadata, AuditCategory, TenderProcurementType } from "../types";
 import { parseUploadedFile } from "../utils/fileParser";
@@ -295,7 +295,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
             </h2>
           </div>
           <p className="text-xs text-slate-300 mt-1 max-w-2xl">
-            This system evaluates deviations quoted by bidders against contract clauses for ANY Turnkey, EPC, Works, or Goods package across any Public Sector Organization or Department. Simply configure the parameters and documents below.
+            This system evaluates deviations quoted by bidders against contract clauses for Turnkey, EPC, and Works packages across any Public Sector Organization or Department. Simply configure the parameters and documents below.
           </p>
         </div>
 
@@ -326,7 +326,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
               type="button"
               onClick={onLoadGoodsCase}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-200 text-xs font-medium rounded-lg border border-slate-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
-              title="Supply of Capital Equipment, Materials & Goods Case"
+              title="Supply of Capital Equipment & Goods Case"
             >
               <Package className="w-3.5 h-3.5 text-emerald-400" />
               <span>Goods / Supply Case</span>
@@ -337,7 +337,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
               type="button"
               onClick={onLoadServicesCase}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-purple-200 text-xs font-medium rounded-lg border border-slate-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
-              title="Operations & Maintenance (O&M) / Non-Consulting Services Case"
+              title="Operations & Maintenance (O&M) / Services Case"
             >
               <Wrench className="w-3.5 h-3.5 text-purple-400" />
               <span>Services / O&amp;M Case</span>
@@ -421,7 +421,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
                   "Statutory Metadata"
                 )
               }
-              placeholder="Enter Case Name (e.g. Supply of Transformers / O&M Services / EPC Works)"
+              placeholder="Enter Package Title / Case Name"
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
             />
           </div>

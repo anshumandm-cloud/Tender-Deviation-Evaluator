@@ -210,12 +210,12 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
             onClick={() => setActiveSection("author")}
             className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
               activeSection === "author"
-                ? "bg-slate-800 text-amber-300 shadow-xs"
+                ? "bg-slate-800 text-blue-400 font-bold shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/70"
             }`}
           >
-            <UserCheck className="w-3.5 h-3.5 text-amber-500" />
-            <span>5. Author: ADM</span>
+            <UserCheck className="w-3.5 h-3.5 text-blue-500" />
+            <span>5. Author: <strong className="text-blue-600 font-bold">ADM</strong></span>
           </button>
         </div>
 
@@ -233,42 +233,8 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                   This web application is an automated <strong>Tender Deviation Evaluation &amp; Clause Harmonization Tool</strong> designed for Public Sector Undertakings (PSUs), Central/State Government Departments, and Infrastructure Project procurement authorities.
                 </p>
                 <p className="text-slate-600 text-xs">
-                  <strong>Universal Procurement Coverage:</strong> While originally engineered for high-value <strong>Turnkey / EPC / Works packages</strong>, the system natively evaluates deviations across <strong>Supply of Goods / Capital Equipment</strong> (Incoterms, FAT/PDI inspection, dispatch payments, warranty) and <strong>Operations &amp; Maintenance (O&amp;M) / Non-Consulting Services</strong> (SLA uptime, monthly running billing, statutory wage revisions, third-party indemnities).
+                  <strong>Comprehensive Procurement Coverage:</strong> Engineered for high-value <strong>Turnkey / EPC / Works packages</strong>, <strong>Supply of Capital Equipment &amp; Goods</strong> (Incoterms, FAT/PDI, delivery schedules, warranty), and <strong>Operations &amp; Maintenance (O&amp;M) / Services</strong> (SLA uptime %, downtime penalties, wage escalation).
                 </p>
-              </div>
-
-              {/* 3 Categories Showcase */}
-              <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
-                <h5 className="font-bold text-slate-900 text-xs sm:text-sm flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-blue-600" />
-                  <span>Procurement Categories Supported:</span>
-                </h5>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="p-3 bg-cyan-50/60 border border-cyan-200 rounded-lg text-xs space-y-1">
-                    <span className="font-bold text-cyan-900 flex items-center gap-1">
-                      <span>🏗️</span> EPC &amp; Turnkey Works
-                    </span>
-                    <p className="text-cyan-800 text-[11px] leading-relaxed">
-                      Evaluates milestone payments, 10% LD caps, civil/erection handovers, defect liability, price variation, and 100% aggregate liability caps.
-                    </p>
-                  </div>
-                  <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg text-xs space-y-1">
-                    <span className="font-bold text-emerald-900 flex items-center gap-1">
-                      <span>📦</span> Goods &amp; Capital Equipment
-                    </span>
-                    <p className="text-emerald-800 text-[11px] leading-relaxed">
-                      Evaluates delivery schedules, Incoterms (DDP/FOR Destination), Factory Acceptance Tests (FAT), stage payments vs site MRC, and replacement warranties.
-                    </p>
-                  </div>
-                  <div className="p-3 bg-purple-50/60 border border-purple-200 rounded-lg text-xs space-y-1">
-                    <span className="font-bold text-purple-900 flex items-center gap-1">
-                      <span>⚙️</span> Services &amp; O&amp;M Contracts
-                    </span>
-                    <p className="text-purple-800 text-[11px] leading-relaxed">
-                      Evaluates Service Level Agreements (SLA uptime %), downtime penalties, minimum wages / EPF / ESI statutory escalation, and monthly billing terms.
-                    </p>
-                  </div>
-                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -288,7 +254,7 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                   </div>
                   <h5 className="font-bold text-slate-900 text-xs sm:text-sm">Deadlock Resolution</h5>
                   <p className="text-xs text-slate-600">
-                    When multiple bidders object to the same clause (e.g., 10% LD, delivery penalties, or Liability Caps), the system formulates balanced, reviewed clauses to prevent tender cancellation while rigorously protecting Employer interests.
+                    When multiple bidders object to the same clause (e.g., 10% LD or Liability Caps), the system formulates balanced, reviewed clauses to prevent tender cancellation while rigorously protecting Employer interests.
                   </p>
                 </div>
 
@@ -307,10 +273,10 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                 <h5 className="font-bold text-slate-900 text-xs">🚀 Quick Start Recommendations:</h5>
                 <ul className="space-y-1.5 text-xs text-slate-600 list-disc pl-5">
                   <li>
-                    <strong>New to the system?</strong> Use the top bar presets: Click <em>"EPC Works"</em>, <em>"Goods Supply"</em>, or <em>"Services (O&amp;M)"</em> to instantly explore pre-configured real-world cases with competing bidders.
+                    <strong>New to the system?</strong> Click <em>"EPC Works"</em> or <em>"Sample Demo"</em> to instantly explore pre-configured cases with competing bidders.
                   </li>
                   <li>
-                    <strong>Have your own tender?</strong> Click <em>"+ New Blank Case"</em>, select your Procurement Type (EPC, Goods, Services, or Civil), fill your Organization details, paste your clauses, and click <em>"Run Comprehensive Evaluation"</em>.
+                    <strong>Have your own tender?</strong> Click <em>"+ New Blank Case"</em>, select your Procurement Type, fill your Organization details, paste your clauses, and click <em>"Run Comprehensive Evaluation"</em>.
                   </li>
                   <li>
                     <strong>Working in an offline office or restricted PSU network?</strong> Check Section 4 of this guide to run the app locally via standalone executable (.exe) or batch file without external internet connectivity.
@@ -344,8 +310,9 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                     <ul className="list-disc pl-4 space-y-1 mt-1">
                       <li><strong>+ New Blank Case:</strong> Clears previous evaluations to start a custom tender from scratch.</li>
                       <li><strong>EPC Works:</strong> Pre-loads turnkey works baseline (GCC/SCC on milestones, 10% LD, 100% liability cap).</li>
-                      <li><strong>Goods Supply:</strong> Pre-loads capital equipment supply case (Incoterms DDP/FOR, FAT inspection, dispatch payments, warranty).</li>
-                      <li><strong>Services (O&amp;M):</strong> Pre-loads facilities/O&amp;M services case (SLA uptime %, downtime penalties, wage escalation).</li>
+                      <li><strong>Goods Supply:</strong> Pre-loads capital equipment supply case (Incoterms, delivery LD, FAT inspection, warranty).</li>
+                      <li><strong>Services (O&amp;M):</strong> Pre-loads operations and maintenance case (SLA uptime %, downtime penalties, wage escalation).</li>
+                      <li><strong>Sample Demo:</strong> Demonstrates multi-bidder deviation assessment.</li>
                       <li><strong>Open / Save Case (.sbd-eval):</strong> Backs up and restores your entire session to a single file on your PC.</li>
                     </ul>
                   </div>
@@ -682,14 +649,14 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
             <div className="space-y-5 animate-in fade-in duration-150">
               <div className="p-5 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-2xl border border-slate-700 space-y-3 shadow-md">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-400 to-amber-200 text-slate-950 font-black text-xl flex items-center justify-center shadow-lg">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 to-blue-400 text-white font-black text-xl flex items-center justify-center shadow-lg border border-blue-300/40">
                     ADM
                   </div>
                   <div>
                     <h4 className="text-base font-bold text-white tracking-tight">
-                      Architected &amp; Authored by ADM
+                      Architected &amp; Authored by <span className="text-blue-400 font-black">ADM</span>
                     </h4>
-                    <p className="text-xs text-amber-300 font-medium">
+                    <p className="text-xs text-blue-300 font-medium">
                       Public Procurement Decision-Support &amp; Administrative Drafting Workbench
                     </p>
                   </div>
@@ -698,7 +665,7 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                   Engineered to assist Dealing Officers, Contract Engineers, and Tender Committees in conducting structured, transparent, and audit-traceable techno-commercial bid deviation assessments.
                 </p>
                 <div className="pt-2 border-t border-slate-700/80 flex flex-wrap items-center justify-between text-xs text-slate-400 gap-2">
-                  <span>Author: <strong className="text-white">ADM</strong></span>
+                  <span>Author: <strong className="text-blue-400 font-bold">ADM</strong></span>
                   <span>System Version: <strong className="text-cyan-300 font-mono">v2.4 (Enterprise)</strong></span>
                   <span className="text-emerald-400">Administrative Alignment: GFR 2017 &amp; CVC Norms</span>
                 </div>
@@ -706,11 +673,11 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
 
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs text-slate-600">
                 <h5 className="font-bold text-slate-900 text-xs">Author's Statement to Dealing Officers:</h5>
-                <blockquote className="italic border-l-2 border-amber-500 pl-3 py-1 text-slate-700">
+                <blockquote className="italic border-l-2 border-blue-500 pl-3 py-1 text-slate-700">
                   "Public procurement evaluations frequently encounter administrative deadlocks when standard bidding terms clash with vendor deviations. The purpose of this tool is to provide Dealing Officers with an analytical, transparent drafting aid to organize commercial comparisons and formulate balanced counter-clauses for institutional review by the Tender Committee, Finance, and Legal Counsel."
                 </blockquote>
                 <p className="pt-1 text-right font-semibold text-slate-800">
-                  — ADM
+                  — <span className="text-blue-600 font-bold">ADM</span>
                 </p>
               </div>
             </div>
@@ -720,7 +687,7 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
         {/* Modal Footer Controls */}
         <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 text-slate-500">
-            <span className="font-semibold text-slate-700">Author: ADM</span>
+            <span className="font-semibold text-slate-700">Author: <strong className="text-blue-600 font-bold">ADM</strong></span>
             <span>•</span>
             <span className="text-emerald-700 font-medium">100% In-Browser Privacy</span>
             <span>•</span>

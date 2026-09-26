@@ -1,6 +1,6 @@
 /**
  * Types for Tender Deviation Evaluation System
- * Standard Bidding Document (SBD) & NIT/ITB for Works, Turnkey / EPC, Goods & Services
+ * Standard Bidding Document (SBD) & NIT/ITB for Turnkey / EPC & Works Packages
  */
 
 export type TenderProcurementType =
@@ -193,7 +193,7 @@ export interface AuditLogEntry {
   action: string; // e.g. "Updated Estimated Value", "Uploaded SBD", "Added Bidder"
   summary: string; // Clear summary of the modification
   details?: string; // Detailed before/after diff or specific note
-  entityAffected?: string; // e.g. "Tender Metadata", "SBD File", "Bidder: Larsen & Toubro"
+  entityAffected?: string; // e.g. "Tender Metadata", "SBD File", "Bidder: Bidder 1"
   complianceTag?: string; // e.g. "GFR Rule 173", "CVC Audit Trail", "Manual Sign-off"
 }
 

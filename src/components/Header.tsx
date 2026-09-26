@@ -61,7 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-slate-500">|</span>
           <span className="text-cyan-300 font-mono">TURNKEY / EPC CASE EVALUATOR</span>
           <span className="text-slate-500">|</span>
-          <span className="text-slate-400 text-[11px]">Author: <strong className="text-amber-300">ADM</strong></span>
+          <span className="text-slate-400 text-[11px]">Author: <strong className="text-blue-400 font-bold">ADM</strong></span>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -152,7 +152,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onLoadGoodsCase}
               className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-md border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-              title="Load Goods / Capital Equipment Supply case preset"
+              title="Load Goods / Capital Equipment Supply case evaluation"
             >
               <Package className="w-3.5 h-3.5 text-emerald-400" />
               <span>Goods Supply</span>
@@ -163,7 +163,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onLoadServicesCase}
               className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-md border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-              title="Load Operations & Maintenance / Non-Consulting Services case preset"
+              title="Load Operations & Maintenance / Services case evaluation"
             >
               <Wrench className="w-3.5 h-3.5 text-purple-400" />
               <span>Services (O&amp;M)</span>

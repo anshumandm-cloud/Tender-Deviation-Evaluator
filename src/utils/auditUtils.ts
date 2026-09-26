@@ -78,7 +78,7 @@ export function generateInitialAuditLogs(
       category: "Evaluation",
       action: "Consolidated Comparative Matrix Generated",
       summary: "Compiled multi-bidder comparative evaluation across all 3 participating bidders",
-      details: "Identified high-impact deadlock areas across BHEL, Larsen & Toubro, and Siemens Energy. Categorized deviations into Commercial, Legal, and Financial classes.",
+      details: "Identified high-impact deadlock areas across participating bidders. Categorized deviations into Commercial, Legal, and Financial classes.",
       entityAffected: "Tender Committee Matrix",
       complianceTag: "CVC Vigilance Scrutiny",
     },

@@ -75,7 +75,7 @@ EMD as stipulated in the tender notification in the form of Bank Guarantee or RT
 4. CRITICAL TIMELINES:
 Completion schedule: Enter Completion Period. Pre-bid clarification meeting: Date 14 days prior to submission.`;
 
-export const SAMPLE_BIDDER_1_DEVIATIONS = `BIDDER: M/s Bidder A (Heavy Civil & EPC Division)
+export const SAMPLE_BIDDER_1_DEVIATIONS = `BIDDER: Bidder 1
 SCHEDULE OF COMMERCIAL & TECHNICAL DEVIATIONS (ANNEXURE-IV & V)
 
 1. Clause Ref: SBD GCC Clause 27.2 - Liquidated Damages
@@ -96,7 +96,7 @@ Quoted Deviation: Bidder requests that aggregate liability shall be capped at 50
 Quoted Deviation: Bidder proposes air-to-cloth ratio of 1.1 m/min with PTFE membrane needle felt bags instead of tender specification of 0.85 m/min.
 Justification: Proven design at industrial turnkey plants; saves plot area and structural weight without compromising guaranteed performance parameters.`;
 
-export const SAMPLE_BIDDER_2_DEVIATIONS = `BIDDER: M/s Bidder B (Engineering Projects Division)
+export const SAMPLE_BIDDER_2_DEVIATIONS = `BIDDER: Bidder 2
 SCHEDULE OF COMMERCIAL & TECHNICAL DEVIATIONS (ANNEXURE-IV & V)
 
 1. Clause Ref: SBD GCC Clause 23.1 - Firm Price Basis & Price Variation
@@ -116,11 +116,11 @@ Justification: Unlimited rolling warranty on replaced parts creates indefinite c
 5. Clause Ref: SBD GCC Clause 18.1 - Advance Payment & Interest
 Quoted Deviation: Bidder requests 10% Advance payment to be interest-free, or interest rate to be capped at Repo Rate rather than SBI MCLR + 2%. Advance BG should be for 100% of advance instead of 110%.`;
 
-export const SAMPLE_BIDDER_3_DEVIATIONS = `BIDDER: M/s Bidder C (Turnkey Consortium)
+export const SAMPLE_BIDDER_3_DEVIATIONS = `BIDDER: Bidder 3
 SCHEDULE OF COMMERCIAL & TECHNICAL DEVIATIONS (ANNEXURE-IV & V)
 
 1. Clause Ref: SBD GCC Clause 18.0 - Payment Milestones & Retention
-Quoted Deviation: Consortium proposes that 10% final milestone should be payable against PAC + submission of equivalent Bank Guarantee, instead of holding payment till Final Acceptance Certificate (FAC) after 12 months.
+Quoted Deviation: Bidder proposes that 10% final milestone should be payable against PAC + submission of equivalent Bank Guarantee, instead of holding payment till Final Acceptance Certificate (FAC) after 12 months.
 Justification: PG test is completed within 3 months of commissioning; waiting 12 months for 10% payment creates cash crunch for turnkey consortium.
 
 2. Clause Ref: SBD GCC Clause 27.2 - Liquidated Damages
@@ -139,24 +139,24 @@ Justification: High-efficiency variable speed drives offer 99.2% availability an
 export const DEFAULT_SAMPLE_BIDDERS: BidderInput[] = [
   {
     id: "bidder-1",
-    name: "M/s Bidder A",
-    deviationFileName: "Bidder_A_Deviations_Ann_IV_V.docx",
+    name: "Bidder 1",
+    deviationFileName: "Bidder_1_Deviations.docx",
     deviationFileText: SAMPLE_BIDDER_1_DEVIATIONS,
     deviationFileFormat: "docx",
     uploadDate: "2026-09-20",
   },
   {
     id: "bidder-2",
-    name: "M/s Bidder B",
-    deviationFileName: "Bidder_B_Commercial_Deviations.xlsx",
+    name: "Bidder 2",
+    deviationFileName: "Bidder_2_Deviations.xlsx",
     deviationFileText: SAMPLE_BIDDER_2_DEVIATIONS,
     deviationFileFormat: "xlsx",
     uploadDate: "2026-09-21",
   },
   {
     id: "bidder-3",
-    name: "M/s Bidder C (Consortium)",
-    deviationFileName: "Bidder_C_Consortium_Deviations.pdf",
+    name: "Bidder 3",
+    deviationFileName: "Bidder_3_Deviations.pdf",
     deviationFileText: SAMPLE_BIDDER_3_DEVIATIONS,
     deviationFileFormat: "pdf",
     uploadDate: "2026-09-22",
@@ -174,7 +174,7 @@ export const DEFAULT_SAMPLE_DOCUMENTS: TenderDocuments = {
   nitSource: "sample",
 };
 
-// Generic Case Templates (Applicable for ANY Turnkey, Works, EPC, Goods, or Services case)
+// Generic Case Templates (Applicable for Turnkey, Works & EPC cases)
 export const GENERIC_TENDER_METADATA: TenderMetadata = {
   packageTitle: "Enter Case Name",
   tenderRefNo: "Enter Case No",
@@ -187,8 +187,8 @@ export const GENERIC_TENDER_METADATA: TenderMetadata = {
 export const GENERIC_BIDDERS: BidderInput[] = [
   {
     id: "bidder-1",
-    name: "Bidder A (Turnkey EPC Contractor)",
-    deviationFileName: "Bidder_A_Commercial_Deviations.docx",
+    name: "Bidder 1",
+    deviationFileName: "Bidder_1_Deviations.docx",
     deviationFileText: `COMMERCIAL & TECHNICAL DEVIATIONS SCHEDULE
 Tender Ref: Enter Case No
 
@@ -207,8 +207,8 @@ Quoted Deviation: Aggregate liability to be capped at 50% of Contract Value with
   },
   {
     id: "bidder-2",
-    name: "Bidder B (Heavy Engineering Supplier)",
-    deviationFileName: "Bidder_B_Deviation_Schedule.xlsx",
+    name: "Bidder 2",
+    deviationFileName: "Bidder_2_Deviations.xlsx",
     deviationFileText: `SCHEDULE OF DEVIATIONS AGAINST SBD/NIT
 
 1. Clause Ref: GCC Clause 18.1 - Advance Payment
@@ -225,8 +225,8 @@ Quoted Deviation: Reduction of PBG quantum from 10% to 5% upon preliminary accep
   },
   {
     id: "bidder-3",
-    name: "Bidder C (Engineering Consortium)",
-    deviationFileName: "Bidder_C_Deviations_Statement.pdf",
+    name: "Bidder 3",
+    deviationFileName: "Bidder_3_Deviations.pdf",
     deviationFileText: `CONSOLIDATED DEVIATION STATEMENT
 
 1. Clause Ref: GCC Clause 29.0 - Defect Liability Period (DLP)
@@ -243,20 +243,19 @@ Quoted Deviation: Requests Price Variation indexing on steel and copper as per R
   },
 ];
 
-// Preset: Supply of Goods & Capital Equipment
+// Preset: Supply of Goods & Capital Equipment (Generic, no specific company names)
 export const GOODS_TENDER_METADATA: TenderMetadata = {
-  packageTitle: "Supply, Delivery & Inspection of High-Voltage Switchgear & Transformers",
-  tenderRefNo: "PSU/PROC/GOODS/2026/089",
-  organization: "Public Sector Power Transmission Corporation",
-  estimateValueCr: "45.00",
+  packageTitle: "Supply, Delivery & Inspection of Capital Goods & Equipment",
+  tenderRefNo: "Enter Case No",
+  organization: "Enter Organization Name",
+  estimateValueCr: "Enter Estimated Value",
   completionPeriodMonths: "6",
   tenderType: "GOODS_SUPPLY",
 };
 
 export const GOODS_SAMPLE_DOCUMENTS: TenderDocuments = {
   sbdName: "SBD_Goods_Supply_GCC_SCC.docx",
-  sbdText: `PUBLIC SECTOR CORPORATION - MATERIALS PROCUREMENT WING
-STANDARD BIDDING DOCUMENT (SBD) FOR SUPPLY OF GOODS & CAPITAL EQUIPMENT
+  sbdText: `STANDARD BIDDING DOCUMENT (SBD) FOR SUPPLY OF GOODS & CAPITAL EQUIPMENT
 
 CLAUSE 1.0: DELIVERY SCHEDULE & INCOTERMS
 1.1 Delivery shall be DDP / FOR Destination at designated central stores within 6 months of Purchase Order (PO).
@@ -282,10 +281,10 @@ CLAUSE 24.0: RISK PURCHASE
   sbdSource: "sample",
   nitName: "NIT_Goods_Procurement_ITB.pdf",
   nitText: `NOTICE INVITING TENDER FOR GOODS PROCUREMENT
-TENDER REF: PSU/PROC/GOODS/2026/089
-Scope: Supply, Inspection, Testing, and Safe Delivery of 220kV Electrical Equipment.
+TENDER REF: Enter Case No
+Scope: Supply, Inspection, Testing, and Safe Delivery of Capital Equipment.
 Earnest Money Deposit (EMD): 2% of estimated value.
-Eligibility: Original Equipment Manufacturers (OEMs) or authorized channel partners with Class-1 Local Content (Make in India).`,
+Eligibility: Original Equipment Manufacturers (OEMs) or authorized suppliers.`,
   nitCharCount: 420,
   nitSource: "sample",
 };
@@ -293,8 +292,8 @@ Eligibility: Original Equipment Manufacturers (OEMs) or authorized channel partn
 export const GOODS_SAMPLE_BIDDERS: BidderInput[] = [
   {
     id: "bidder-g1",
-    name: "ElectroTech Industries Ltd. (OEM)",
-    deviationFileName: "ElectroTech_Deviations_Goods.docx",
+    name: "Bidder 1",
+    deviationFileName: "Bidder_1_Deviations_Goods.docx",
     deviationFileText: `SCHEDULE OF DEVIATIONS - SUPPLY OF GOODS
 1. Clause Ref: SBD Clause 6.1 - Payment Terms
 Quoted Deviation: Bidder requests 90% payment against proof of dispatch (Lorry Receipt / Consignment Note) through Inland LC, and balance 10% against site delivery.
@@ -310,36 +309,35 @@ Quoted Deviation: Warranty limited strictly to repair or replacement at supplier
   },
   {
     id: "bidder-g2",
-    name: "Apex Switchgears Consortium",
-    deviationFileName: "Apex_Goods_Qualifications.xlsx",
+    name: "Bidder 2",
+    deviationFileName: "Bidder_2_Deviations_Goods.xlsx",
     deviationFileText: `COMMERCIAL QUALIFICATIONS STATEMENT
 1. Clause Ref: SBD Clause 15.1 - Performance Bank Guarantee
-Quoted Deviation: Requests PBG quantum to be reduced from 10% to 3% as per Ministry of Finance OM on reduced security deposits.
+Quoted Deviation: Requests PBG quantum to be reduced from 10% to 3% as per Ministry of Finance guidelines on reduced security deposits.
 
 2. Clause Ref: SBD Clause 24.1 - Risk & Cost Purchase
 Quoted Deviation: Requests unconditional deletion of Risk Purchase clause; liability upon termination to be capped at forfeited PBG value only.
 
 3. Clause Ref: SBD Clause 1.1 - Price Basis & Escalation
-Quoted Deviation: Firm prices acceptable only if delivery is taken within 90 days; beyond 90 days, IEEMA price variation formula for transformers must apply.`,
+Quoted Deviation: Firm prices acceptable only if delivery is taken within 90 days; beyond 90 days, standard price variation formula must apply.`,
     deviationFileFormat: "xlsx",
     uploadDate: "2026-09-24",
   },
 ];
 
-// Preset: Operations & Maintenance / Non-Consultancy Services
+// Preset: Operations & Maintenance / Non-Consultancy Services (Generic, no specific company names)
 export const SERVICES_TENDER_METADATA: TenderMetadata = {
-  packageTitle: "Comprehensive Operations & Maintenance (O&M) and Facility Management Services",
-  tenderRefNo: "PSU/SERVICES/O&M/2026/112",
-  organization: "National Infrastructure & Utilities Undertaking",
-  estimateValueCr: "18.50",
+  packageTitle: "Operations & Maintenance (O&M) and Facility Management Services",
+  tenderRefNo: "Enter Case No",
+  organization: "Enter Organization Name",
+  estimateValueCr: "Enter Estimated Value",
   completionPeriodMonths: "36",
   tenderType: "SERVICES_O_AND_M",
 };
 
 export const SERVICES_SAMPLE_DOCUMENTS: TenderDocuments = {
   sbdName: "SBD_Services_O&M_GCC_SCC.docx",
-  sbdText: `NATIONAL INFRASTRUCTURE UNDERTAKING - CONTRACTS DIVISION
-STANDARD BIDDING DOCUMENT (SBD) FOR COMPREHENSIVE OPERATIONS & MAINTENANCE (O&M) SERVICES
+  sbdText: `STANDARD BIDDING DOCUMENT (SBD) FOR COMPREHENSIVE OPERATIONS & MAINTENANCE (O&M) SERVICES
 
 CLAUSE 2.0: SERVICE LEVEL AGREEMENT (SLA) & AVAILABILITY
 2.1 Service Provider shall ensure minimum 98.5% uninterrupted system availability on a 24x7x365 basis.
@@ -362,7 +360,7 @@ CLAUSE 21.0: INDEMNITY & THIRD-PARTY LIABILITIES
   sbdSource: "sample",
   nitName: "NIT_Services_Procurement.pdf",
   nitText: `NOTICE INVITING TENDER FOR COMPREHENSIVE O&M SERVICES
-TENDER REF: PSU/SERVICES/O&M/2026/112
+TENDER REF: Enter Case No
 Scope: Deployment of skilled supervisory and maintenance workforce, preventive maintenance, breakdown repairs, and consumable replenishment for 36 months.`,
   nitCharCount: 380,
   nitSource: "sample",
@@ -371,8 +369,8 @@ Scope: Deployment of skilled supervisory and maintenance workforce, preventive m
 export const SERVICES_SAMPLE_BIDDERS: BidderInput[] = [
   {
     id: "bidder-s1",
-    name: "TotalCare Facilities Management Pvt. Ltd.",
-    deviationFileName: "TotalCare_Services_Deviations.docx",
+    name: "Bidder 1",
+    deviationFileName: "Bidder_1_Deviations_Services.docx",
     deviationFileText: `SCHEDULE OF SERVICE DEVIATIONS & QUALIFICATIONS
 1. Clause Ref: SBD Clause 2.1 & 2.2 - SLA Downtime Penalty
 Quoted Deviation: Service provider requests SLA availability benchmark of 95% instead of 98.5%. Maximum monthly penalty ceiling to be capped at 5% of monthly bill.
@@ -388,8 +386,8 @@ Quoted Deviation: Total aggregate liability for any operational damage or third-
   },
   {
     id: "bidder-s2",
-    name: "Reliable Infra Services Ltd.",
-    deviationFileName: "Reliable_Service_Deviations.pdf",
+    name: "Bidder 2",
+    deviationFileName: "Bidder_2_Deviations_Services.pdf",
     deviationFileText: `COMMERCIAL & LEGAL DEVIATIONS
 1. Clause Ref: SBD Clause 9.1 - Management Fee Escalation
 Quoted Deviation: Fixed service fee to be subject to annual escalation of 7% per annum to offset overhead and administrative inflation over the 3-year tenure.

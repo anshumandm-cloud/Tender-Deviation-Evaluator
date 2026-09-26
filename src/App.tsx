@@ -344,7 +344,7 @@ export default function App() {
       "Goods Procurement Case Loaded",
       "System & Files",
       "Loaded Capital Equipment & Goods Supply procurement case template (Incoterms, Delivery LD, Factory FAT)",
-      `Package: ${GOODS_TENDER_METADATA.packageTitle} | Ref: ${GOODS_TENDER_METADATA.tenderRefNo}`,
+      `Package: ${GOODS_TENDER_METADATA.packageTitle}`,
       "Tender Case",
       "Goods Template Initialization"
     );
@@ -369,7 +369,7 @@ export default function App() {
       "Services (O&M) Case Loaded",
       "System & Files",
       "Loaded Comprehensive O&M / Non-Consulting Services case template (SLA Availability, Monthly Billing, Wage Escalation)",
-      `Package: ${SERVICES_TENDER_METADATA.packageTitle} | Ref: ${SERVICES_TENDER_METADATA.tenderRefNo}`,
+      `Package: ${SERVICES_TENDER_METADATA.packageTitle}`,
       "Tender Case",
       "Services Template Initialization"
     );
@@ -1056,7 +1056,7 @@ export default function App() {
           <div className="text-center bg-slate-950/70 border border-slate-800 px-5 py-2.5 rounded-xl shadow-inner">
             <div className="text-xs text-slate-300">
               Designed, Architected &amp; Authored by{" "}
-              <strong className="text-amber-400 font-black tracking-wide text-sm">
+              <strong className="text-blue-400 font-black tracking-wide text-sm">
                 ADM
               </strong>
             </div>
@@ -1105,7 +1105,7 @@ export default function App() {
             Statutory Alignment: GFR 2017 Rule 173(xiv) &amp; CVC Norms • Local In-Browser RAM Execution (Privacy-by-Design) • Non-Legal Advisory Tool
           </div>
           <div>
-            Confidential PSU &amp; Government Works Evaluation • Author: <strong className="text-slate-300 font-bold">ADM</strong>
+            Confidential PSU &amp; Government Works Evaluation • Author: <strong className="text-blue-400 font-bold">ADM</strong>
           </div>
         </div>
       </footer>
