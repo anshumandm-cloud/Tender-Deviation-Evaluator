@@ -1,0 +1,6 @@
+{
+  "name": "Tender Deviation Evaluator",
+  "description": "Public sector contract deviation evaluation system for SBD and NIT/ITB tenders with multi-bidder comparative analysis, clause harmonization, and AI contract assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
