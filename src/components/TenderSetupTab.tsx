@@ -19,6 +19,8 @@ import {
   HelpCircle,
   Package,
   Wrench,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import { BidderInput, TenderDocuments, TenderMetadata, AuditCategory, TenderProcurementType } from "../types";
 import { parseUploadedFile } from "../utils/fileParser";
@@ -34,7 +36,6 @@ interface TenderSetupTabProps {
   isEvaluating: boolean;
   evaluationStep: string;
   onLoadGenericCase?: () => void;
-  onLoadGoodsCase?: () => void;
   onLoadServicesCase?: () => void;
   onNewBlankCase?: () => void;
   onLoadSample?: () => void;
@@ -59,7 +60,6 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
   isEvaluating,
   evaluationStep,
   onLoadGenericCase,
-  onLoadGoodsCase,
   onLoadServicesCase,
   onNewBlankCase,
   onLoadSample,
@@ -70,10 +70,18 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
   const [activeBidderTextPreview, setActiveBidderTextPreview] = useState<string | null>(null);
   const [showDriveInput, setShowDriveInput] = useState<"sbd" | "nit" | null>(null);
   const [driveUrl, setDriveUrl] = useState("");
+  const [setupFeedback, setSetupFeedback] = useState<{ message: string; type: "error" | "info" } | null>(null);
 
   const sbdFileInputRef = useRef<HTMLInputElement>(null);
   const nitFileInputRef = useRef<HTMLInputElement>(null);
   const bidderFileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+
+  const showFeedback = (message: string, type: "error" | "info" = "info") => {
+    setSetupFeedback({ message, type });
+    setTimeout(() => {
+      setSetupFeedback((cur) => (cur?.message === message ? null : cur));
+    }, 4500);
+  };
 
   // Format character count to Indian Lakhs/thousands for clarity
   const formatChars = (count: number) => {
@@ -168,7 +176,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
         "Bidder Deviation Schedule"
       );
     } catch (err: any) {
-      alert(`Error reading deviation file for bidder: ${err.message}`);
+      showFeedback(`Error reading deviation file for bidder: ${err.message}`, "error");
     }
   };
 
@@ -215,7 +223,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
   // Remove individual bidder
   const removeBidder = (id: string) => {
     if (bidders.length <= 1) {
-      alert("At least one bidder must remain in the evaluation.");
+      showFeedback("At least one bidder must remain in the evaluation roster.", "error");
       return;
     }
     const target = bidders.find((b) => b.id === id);
@@ -283,6 +291,28 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Inline Feedback Notification */}
+      {setupFeedback && (
+        <div
+          className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-between shadow-xs transition-all ${
+            setupFeedback.type === "error"
+              ? "bg-rose-50 border-rose-300 text-rose-800"
+              : "bg-blue-50 border-blue-300 text-blue-800"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{setupFeedback.message}</span>
+          </div>
+          <button
+            onClick={() => setSetupFeedback(null)}
+            className="p-1 hover:bg-black/5 rounded cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Universal Case Mode Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-xl border border-slate-800 p-4 text-white shadow-sm flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -319,17 +349,6 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
             >
               <Layers className="w-3.5 h-3.5 text-cyan-400" />
               <span>EPC / Turnkey Works</span>
-            </button>
-          )}
-          {onLoadGoodsCase && (
-            <button
-              type="button"
-              onClick={onLoadGoodsCase}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-200 text-xs font-medium rounded-lg border border-slate-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
-              title="Supply of Capital Equipment & Goods Case"
-            >
-              <Package className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Goods / Supply Case</span>
             </button>
           )}
           {onLoadServicesCase && (
@@ -396,10 +415,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white font-medium text-slate-800"
             >
               <option value="EPC_TURNKEY">EPC / Turnkey Contracts (GCC &amp; SCC)</option>
-              <option value="GOODS_SUPPLY">Supply of Goods / Capital Equipment (Supply GCC)</option>
-              <option value="SERVICES_O_AND_M">O&amp;M / Facility / Non-Consulting Services (SLA)</option>
-              <option value="CIVIL_WORKS">Item-Rate / Lump-Sum Civil &amp; Structural Works</option>
-              <option value="CONSULTANCY">Consultancy / PMC / Engineering Services</option>
+              <option value="SERVICES_O_AND_M">O&amp;M / Facility / Non-Consulting Services (SLA &amp; Eligibility)</option>
             </select>
           </div>
 

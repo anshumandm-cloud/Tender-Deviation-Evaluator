@@ -5,10 +5,7 @@
 
 export type TenderProcurementType =
   | "EPC_TURNKEY"
-  | "GOODS_SUPPLY"
-  | "SERVICES_O_AND_M"
-  | "CIVIL_WORKS"
-  | "CONSULTANCY";
+  | "SERVICES_O_AND_M";
 
 export interface TenderMetadata {
   packageTitle: string;

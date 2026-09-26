@@ -59,7 +59,7 @@ interface ContractChatbotTabProps {
   ) => void;
 }
 
-const LOCAL_STORAGE_CHAT_KEY = "contract_officer_chat_history";
+const LOCAL_STORAGE_CHAT_KEY = "contract_officer_chat_history_v2";
 
 export const ContractChatbotTab: React.FC<ContractChatbotTabProps> = ({
   metadata,
@@ -78,30 +78,47 @@ export const ContractChatbotTab: React.FC<ContractChatbotTabProps> = ({
   isReRunningAnalysis,
   onNavigateToTab,
 }) => {
+  const getDefaultWelcomeMessage = (): ChatMessage => ({
+    id: "msg-welcome",
+    role: "assistant",
+    content: `Greetings, Officer. I am your Public Procurement & Contracts Advisor.
+
+I am loaded with your active package context ("${metadata.packageTitle || "Tender Package"}" — ${metadata.tenderType === "SERVICES_O_AND_M" ? "Services & Facility O&M" : "EPC / Turnkey Works"}) and trained in Standard Bidding Documents (GCC/SCC/SLA), CVC procurement circulars, and GFR 2017 rules.
+
+⚡ **Interactive Improvisation & Analysis**:
+• Discuss any clarification or concession across **EPC Works** or **Services (O&M)**; I will propose concrete clause counter-proposals that you can **apply directly to your output** with 1 click.
+• Upload your organization's **standard corrigendum format or template** below; the system will improvise the evaluation and re-run the analysis according to your exact structure.
+• Directives agreed here directly update the Harmonized Addendum Clauses and Comparative Matrix.`,
+    timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+  });
+
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_CHAT_KEY);
+      // Check v2 key first, then fall back to old key if needed
+      const saved = localStorage.getItem(LOCAL_STORAGE_CHAT_KEY) || localStorage.getItem("contract_officer_chat_history");
       if (saved) {
-        return JSON.parse(saved);
+        const parsed: ChatMessage[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // If the first message is the old greeting, replace it with the updated greeting
+          const updated = parsed.map((m) => {
+            if (m.id === "msg-welcome" || m.content.includes("Senior Public Procurement")) {
+              return {
+                ...m,
+                content: m.content.replace(
+                  "Greetings, Dealing Officer. I am your Senior Public Procurement, Legal & Contracts Advisor.",
+                  "Greetings, Officer. I am your Public Procurement & Contracts Advisor."
+                ),
+              };
+            }
+            return m;
+          });
+          return updated;
+        }
       }
     } catch (e) {
       console.warn("Failed to load chat history:", e);
     }
-    return [
-      {
-        id: "msg-welcome",
-        role: "assistant",
-        content: `Greetings, Dealing Officer. I am your Senior Public Procurement, Legal & Contracts Advisor.
-
-I am loaded with your active package context ("${metadata.packageTitle || "Tender Package"}" — ${metadata.tenderType === "GOODS_SUPPLY" ? "Goods & Equipment Supply" : metadata.tenderType === "SERVICES_O_AND_M" ? "Services & Facility O&M" : "EPC / Turnkey Works"}) and trained in Standard Bidding Documents (GCC/SCC/SLA), CVC procurement circulars, and GFR 2017 rules.
-
-⚡ **Interactive Improvisation & Analysis**:
-• Discuss any clarification or concession across **EPC Works**, **Goods / Equipment**, or **Services (O&M)**; I will propose concrete clause counter-proposals that you can **apply directly to your output** with 1 click.
-• Upload your organization's **standard corrigendum format or template** below; the system will improvise the evaluation and re-run the analysis according to your exact structure.
-• Directives agreed here directly update the Harmonized Addendum Clauses and Comparative Matrix.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-    ];
+    return [getDefaultWelcomeMessage()];
   });
 
   const [inputMessage, setInputMessage] = useState("");
@@ -117,6 +134,7 @@ I am loaded with your active package context ("${metadata.packageTitle || "Tende
   const [manualInstruction, setManualInstruction] = useState("");
   const [manualClause, setManualClause] = useState("GCC Clause 27.2");
   const [showAddManualModal, setShowAddManualModal] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const formatFileInputRef = useRef<HTMLInputElement>(null);
@@ -281,21 +299,14 @@ I am loaded with your active package context ("${metadata.packageTitle || "Tende
   };
 
   const handleClearHistory = () => {
-    if (
-      window.confirm(
-        "Are you sure you want to delete all chat history? This action cannot be undone."
-      )
-    ) {
-      localStorage.removeItem(LOCAL_STORAGE_CHAT_KEY);
-      setMessages([
-        {
-          id: `msg-${Date.now()}`,
-          role: "assistant",
-          content: "Chat history has been cleared as requested. How can I assist you with the tender evaluation?",
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
-    }
+    setShowClearConfirm(true);
+  };
+
+  const executeClearHistory = () => {
+    localStorage.removeItem(LOCAL_STORAGE_CHAT_KEY);
+    localStorage.removeItem("contract_officer_chat_history");
+    setMessages([getDefaultWelcomeMessage()]);
+    setShowClearConfirm(false);
   };
 
   const suggestedQuestions = [
@@ -946,6 +957,39 @@ I am loaded with your active package context ("${metadata.packageTitle || "Tende
                 className="px-4 py-1.5 text-xs bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white font-bold rounded-lg cursor-pointer shadow-xs"
               >
                 Apply &amp; Save Directive
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Chat Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-slate-950/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-3.5 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-4 h-4" />
+              </div>
+              <h4 className="font-bold text-slate-900 text-sm">Clear Chat History?</h4>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              This will remove all current messages from this discussion and reset the advisor to the initial greeting.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeClearHistory}
+                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded-lg cursor-pointer transition-colors shadow-xs"
+              >
+                Clear History
               </button>
             </div>
           </div>

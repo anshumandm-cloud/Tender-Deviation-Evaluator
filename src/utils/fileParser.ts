@@ -1,21 +1,29 @@
 import * as XLSX from "xlsx";
 import mammoth from "mammoth";
+import { performBrowserImageOcr } from "./ocrAndTamperAnalyzer";
 
 /**
- * Parses user-uploaded files (DOCX, XLSX, TXT, PDF, etc.) into plain text
- * for evaluation against SBD and NIT clauses.
+ * Parses user-uploaded files (DOCX, XLSX, TXT, PDF, PNG, JPG, TIFF, etc.) into plain text
+ * for evaluation against SBD and NIT clauses, with OCR for image-based documents.
  */
 export async function parseUploadedFile(file: File): Promise<{
   text: string;
   charCount: number;
   fileName: string;
   fileType: string;
+  isOcrScanned?: boolean;
 }> {
   const extension = file.name.split(".").pop()?.toLowerCase() || "";
   let extractedText = "";
+  let isOcrScanned = false;
 
   try {
-    if (extension === "docx") {
+    if (["png", "jpg", "jpeg", "webp", "bmp", "tiff"].includes(extension)) {
+      // Image file: Run Browser OCR Reader
+      const ocrResult = await performBrowserImageOcr(file);
+      extractedText = ocrResult.extractedText;
+      isOcrScanned = true;
+    } else if (extension === "docx") {
       const arrayBuffer = await file.arrayBuffer();
       const result = await mammoth.extractRawText({ arrayBuffer });
       extractedText = result.value || "";
@@ -33,7 +41,6 @@ export async function parseUploadedFile(file: File): Promise<{
       extractedText = textParts.join("\n\n");
     } else if (extension === "pdf") {
       // In-browser text extraction from PDF
-      // Try arrayBuffer text scanning or fallback to standard stream reading
       extractedText = await extractTextFromPdf(file);
     } else {
       // Standard text/markdown/json fallback
@@ -57,6 +64,7 @@ export async function parseUploadedFile(file: File): Promise<{
     charCount: cleanedText.length,
     fileName: file.name,
     fileType: extension,
+    isOcrScanned,
   };
 }
 

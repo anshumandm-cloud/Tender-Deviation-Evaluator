@@ -230,10 +230,12 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                   Welcome Dealing Officer / Contract Manager!
                 </h4>
                 <p className="text-slate-700 text-xs sm:text-sm">
-                  This web application is an automated <strong>Tender Deviation Evaluation &amp; Clause Harmonization Tool</strong> designed for Public Sector Undertakings (PSUs), Central/State Government Departments, and Infrastructure Project procurement authorities.
+                  This web application is a comprehensive <strong>Tender Evaluation Tool</strong> designed for Public Sector Undertakings (PSUs), Central/State Government Departments, and Infrastructure Project procurement authorities.
                 </p>
                 <p className="text-slate-600 text-xs">
-                  <strong>Comprehensive Procurement Coverage:</strong> Engineered for high-value <strong>Turnkey / EPC / Works packages</strong>, <strong>Supply of Capital Equipment &amp; Goods</strong> (Incoterms, FAT/PDI, delivery schedules, warranty), and <strong>Operations &amp; Maintenance (O&amp;M) / Services</strong> (SLA uptime %, downtime penalties, wage escalation).
+                  <strong>Specialized Evaluation for EPC-Works &amp; Services:</strong>
+                  <br />• <strong>EPC &amp; Turnkey Works:</strong> Clause deviation evaluation, anti-deadlock harmonization, milestone payments, LD caps, and limitation of liability.
+                  <br />• <strong>Services &amp; O&amp;M Contracts:</strong> Detailed scrutiny of <strong>(i) Financial Turnover</strong> and <strong>(ii) Experience Criteria</strong> as per NIT, automated generation of <strong>Shortfall / Clarification Notices</strong> or <strong>Formal Rejection Intimations</strong> under Open Tender Guidelines, <strong>Banning/Debarment Alerts</strong>, <strong>OCR Text Extraction</strong>, and confidential <strong>Document Authenticity/Forgery Detection</strong>.
                 </p>
               </div>
 
@@ -310,10 +312,10 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                     <ul className="list-disc pl-4 space-y-1 mt-1">
                       <li><strong>+ New Blank Case:</strong> Clears previous evaluations to start a custom tender from scratch.</li>
                       <li><strong>EPC Works:</strong> Pre-loads turnkey works baseline (GCC/SCC on milestones, 10% LD, 100% liability cap).</li>
-                      <li><strong>Goods Supply:</strong> Pre-loads capital equipment supply case (Incoterms, delivery LD, FAT inspection, warranty).</li>
-                      <li><strong>Services (O&amp;M):</strong> Pre-loads operations and maintenance case (SLA uptime %, downtime penalties, wage escalation).</li>
+                      <li><strong>Services (O&amp;M):</strong> Pre-loads operations, maintenance &amp; services case (Turnover &amp; Experience eligibility evaluation, Shortfall notices, Banning alerts, Document OCR).</li>
                       <li><strong>Sample Demo:</strong> Demonstrates multi-bidder deviation assessment.</li>
-                      <li><strong>Open / Save Case (.sbd-eval):</strong> Backs up and restores your entire session to a single file on your PC.</li>
+                      <li><strong>Save Case (.sbd-eval):</strong> One-click cryptographic backup that bundles all tender metadata, GCC/SCC clauses, bidder documents, evaluations, shortfall letters, audit logs, and officer directives into a single offline file saved directly on your PC.</li>
+                      <li><strong>Open Case (.sbd-eval):</strong> Instantly restores your entire work-in-progress session from your hard drive or secure pendrive, with 100% fidelity and zero data loss.</li>
                     </ul>
                   </div>
                   <div>
@@ -321,7 +323,7 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                     <ul className="list-disc pl-4 space-y-1 mt-1">
                       <li><strong>Tender Metadata:</strong> Organization Name, Package Title, Tender Ref No, Estimated Value, Bid Opening Date, Dealing Officer details.</li>
                       <li><strong>Tender Documents:</strong> Paste or upload SBD General Conditions (GCC) &amp; Special Conditions (SCC), plus NIT / Instructions to Bidders (ITB).</li>
-                      <li><strong>Bidder Schedules:</strong> Add bidders (+ Add Bidder), name them, and paste their quoted deviation letters.</li>
+                      <li><strong>Bidder Schedules:</strong> Add bidders (+ Add Bidder), name them, and paste their quoted deviation letters or upload PDF/Word files.</li>
                     </ul>
                   </div>
                 </div>
@@ -624,17 +626,48 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                   <h5 className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
                     <HardDrive className="w-4 h-4 text-emerald-600" />
-                    <span>Offline Case Transfer Protocol (.sbd-eval)</span>
+                    <span>In-Depth Spotlight: "Save Case" &amp; "Open Case" (.sbd-eval) Workflow</span>
                   </h5>
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    Dealing Officers can perform their complete case study offline, save the project snapshot as <code className="bg-white border border-slate-300 px-1.5 py-0.5 rounded font-mono text-slate-800">Tender_Evaluation.sbd-eval</code>, and email or transfer that small file to the Tender Committee Chairman or Associate Finance for concurrence. The recipient opens the exact same file offline without needing a central database.
+                    In public procurement departments and PSU tender cells, multi-bidder evaluations often span several days or weeks while awaiting clarifications or committee sittings. The <strong>Save Case</strong> and <strong>Open Case</strong> mechanism is engineered specifically for this real-world administrative lifecycle:
                   </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-1">
+                      <strong className="text-blue-700 flex items-center gap-1">
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Save Case (Export Snapshot)</span>
+                      </strong>
+                      <p className="text-slate-600 text-[11px] leading-relaxed">
+                        • Encapsulates your entire active tender study into a single tamper-evident file: <code>[TenderRef]_Evaluation.sbd-eval</code>.<br />
+                        • Preserves: Tender Metadata, Uploaded SBD/NIT clauses, Bidders &amp; schedules, Eligibility scrutiny results (Round 1 &amp; 2), Shortfall notices &amp; Rejection letters, Harmonized clauses, AI directives, and the immutable <strong>Audit Trail log</strong> with officer timestamps.<br />
+                        • Completely client-side: Saves straight to your local PC storage or USB drive without transmitting a single byte to external servers.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-1">
+                      <strong className="text-emerald-700 flex items-center gap-1">
+                        <HardDrive className="w-3.5 h-3.5" />
+                        <span>Open Case (Restore / Resume)</span>
+                      </strong>
+                      <p className="text-slate-600 text-[11px] leading-relaxed">
+                        • One-click instant restoration of prior work on any computer running this application or offline executable.<br />
+                        • <strong>Peer Review &amp; Committee Sharing:</strong> A Dealing Officer can email the lightweight <code>.sbd-eval</code> file to the Tender Committee Members, Finance Officer, or Legal Advisor, who can open it to examine the exact comparative matrices, shortfall grounds, and audit trail without re-entering data.<br />
+                        • Auto-routes back to the relevant tab (Individual Bidder or Service Eligibility) with continuity guaranteed.
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-500 italic">
+                    Note: The <code>.sbd-eval</code> format is standard JSON encoded, readable in any offline environment, ensuring long-term audit compliance and statutory record-keeping per CVC record retention guidelines.
+                  </p>
+
                   <button
                     onClick={() => {
                       onClose();
                       onOpenOfflineModal();
                     }}
-                    className="text-xs text-indigo-700 hover:text-indigo-900 font-bold flex items-center gap-1 cursor-pointer underline"
+                    className="text-xs text-indigo-700 hover:text-indigo-900 font-bold flex items-center gap-1 cursor-pointer underline pt-1"
                   >
                     <span>Open Detailed Offline Intranet Modal</span>
                     <ArrowRight className="w-3.5 h-3.5" />

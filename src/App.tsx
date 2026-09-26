@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Laptop,
   Smartphone,
+  X,
 } from "lucide-react";
 import { Header } from "./components/Header";
 import { TenderSetupTab } from "./components/TenderSetupTab";
@@ -25,6 +26,7 @@ import { AuditTrailTab } from "./components/AuditTrailTab";
 import { OfflineDesktopModal } from "./components/OfflineDesktopModal";
 import { KnowMeModal } from "./components/KnowMeModal";
 import { AndroidPlayStoreModal } from "./components/AndroidPlayStoreModal";
+import { MigrationNoticeBanner } from "./components/MigrationNoticeBanner";
 import {
   BidderInput,
   ComparativeEvaluation,
@@ -47,9 +49,6 @@ import {
   SAMPLE_TENDER_METADATA,
   GENERIC_TENDER_METADATA,
   GENERIC_BIDDERS,
-  GOODS_TENDER_METADATA,
-  GOODS_SAMPLE_DOCUMENTS,
-  GOODS_SAMPLE_BIDDERS,
   SERVICES_TENDER_METADATA,
   SERVICES_SAMPLE_DOCUMENTS,
   SERVICES_SAMPLE_BIDDERS,
@@ -57,6 +56,17 @@ import {
   BLANK_DOCUMENTS,
   BLANK_BIDDERS,
 } from "./utils/sampleData";
+import { ServiceEvaluationTab } from "./components/ServiceEvaluationTab";
+import {
+  ServiceCriteriaRequirement,
+  BidderServiceSubmission,
+  InternalGuidelines,
+} from "./types/serviceEvaluation";
+import {
+  SAMPLE_SERVICES_CRITERIA,
+  SAMPLE_SERVICE_BIDDERS,
+} from "./utils/serviceSampleData";
+import { DEFAULT_SHORTFALL_OT_GUIDELINES } from "./utils/serviceEvaluationEngine";
 import {
   DEFAULT_DEALING_OFFICER,
   generateInitialAuditLogs,
@@ -67,7 +77,7 @@ import { triggerFileDownload } from "./utils/exportUtils";
 export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<
-    "setup" | "single" | "comparative" | "harmonized" | "chat" | "audit"
+    "setup" | "single" | "comparative" | "harmonized" | "service_eval" | "chat" | "audit"
   >("setup");
 
   // Tender Setup States
@@ -146,6 +156,14 @@ export default function App() {
     generateFallbackReviewedClauses(SAMPLE_TENDER_METADATA)
   );
 
+  // Service & O&M Eligibility Evaluation States
+  const [serviceCriteria, setServiceCriteria] = useState<ServiceCriteriaRequirement>(SAMPLE_SERVICES_CRITERIA);
+  const [serviceGuidelines, setServiceGuidelines] = useState<InternalGuidelines>(DEFAULT_SHORTFALL_OT_GUIDELINES);
+  const [serviceBidders, setServiceBidders] = useState<BidderServiceSubmission[]>(SAMPLE_SERVICE_BIDDERS);
+  const [serviceEvaluationStage, setServiceEvaluationStage] = useState<
+    "ROUND_1_INITIAL" | "SHORTFALL_ISSUED" | "ROUND_2_SHORTFALL_EVAL" | "FINAL_ACCEPTED"
+  >("ROUND_1_INITIAL");
+
   // UI States
   const [selectedBidderId, setSelectedBidderId] = useState<string>(DEFAULT_SAMPLE_BIDDERS[0].id);
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
@@ -158,6 +176,23 @@ export default function App() {
     "overview" | "features" | "security" | "offline" | "author"
   >("overview");
   const [evaluationError, setEvaluationError] = useState<string | null>(null);
+
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
+
+  const showToast = (text: string, type: "success" | "error" | "info" = "info") => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage((cur) => (cur?.text === text ? null : cur));
+    }, 4500);
+  };
 
   // Dealing Officer Directives & Format Template States
   const [officerDirectives, setOfficerDirectives] = useState<OfficerDirective[]>(() => {
@@ -326,100 +361,87 @@ export default function App() {
     setActiveTab("setup");
   };
 
-  // Load Supply of Goods & Capital Equipment Case
-  const handleLoadGoodsCase = () => {
-    setMetadata(GOODS_TENDER_METADATA);
-    setDocuments(GOODS_SAMPLE_DOCUMENTS);
-    setBidders(GOODS_SAMPLE_BIDDERS);
-    setSelectedBidderId(GOODS_SAMPLE_BIDDERS[0].id);
-    setSingleEvaluations([
-      generateFallbackSingleEvaluation(GOODS_SAMPLE_BIDDERS[0], GOODS_TENDER_METADATA),
-    ]);
-    setComparativeEvaluation(
-      generateFallbackComparativeEvaluation(GOODS_SAMPLE_BIDDERS, GOODS_TENDER_METADATA)
-    );
-    setReviewedClausesData(generateFallbackReviewedClauses(GOODS_TENDER_METADATA));
-    setEvaluationError(null);
-    logAuditAction(
-      "Goods Procurement Case Loaded",
-      "System & Files",
-      "Loaded Capital Equipment & Goods Supply procurement case template (Incoterms, Delivery LD, Factory FAT)",
-      `Package: ${GOODS_TENDER_METADATA.packageTitle}`,
-      "Tender Case",
-      "Goods Template Initialization"
-    );
-    setActiveTab("setup");
-  };
-
-  // Load Operations & Maintenance (O&M) / Services Case
+  // Load Operations & Maintenance (O&M) / Services Case with Eligibility Criteria & Document Scrutiny
   const handleLoadServicesCase = () => {
     setMetadata(SERVICES_TENDER_METADATA);
     setDocuments(SERVICES_SAMPLE_DOCUMENTS);
     setBidders(SERVICES_SAMPLE_BIDDERS);
-    setSelectedBidderId(SERVICES_SAMPLE_BIDDERS[0].id);
-    setSingleEvaluations([
-      generateFallbackSingleEvaluation(SERVICES_SAMPLE_BIDDERS[0], SERVICES_TENDER_METADATA),
-    ]);
-    setComparativeEvaluation(
-      generateFallbackComparativeEvaluation(SERVICES_SAMPLE_BIDDERS, SERVICES_TENDER_METADATA)
-    );
-    setReviewedClausesData(generateFallbackReviewedClauses(SERVICES_TENDER_METADATA));
+    setServiceCriteria(SAMPLE_SERVICES_CRITERIA);
+    setServiceBidders(SAMPLE_SERVICE_BIDDERS);
+    setServiceEvaluationStage("ROUND_1_INITIAL");
+    setSelectedBidderId(SAMPLE_SERVICE_BIDDERS[0].bidderId);
     setEvaluationError(null);
     logAuditAction(
-      "Services (O&M) Case Loaded",
+      "Services (O&M) Eligibility Case Loaded",
       "System & Files",
-      "Loaded Comprehensive O&M / Non-Consulting Services case template (SLA Availability, Monthly Billing, Wage Escalation)",
+      "Loaded Comprehensive O&M / Services case with Financial Turnover and Technical Experience criteria scrutiny",
       `Package: ${SERVICES_TENDER_METADATA.packageTitle}`,
       "Tender Case",
       "Services Template Initialization"
     );
-    setActiveTab("setup");
+    setActiveTab("service_eval");
   };
 
   // Start fresh blank case for any live or draft tender
   const handleNewBlankCase = () => {
-    if (window.confirm("Start a new blank case? All current inputs and evaluations will be cleared.")) {
-      setMetadata(BLANK_TENDER_METADATA);
-      setDocuments(BLANK_DOCUMENTS);
-      setBidders(BLANK_BIDDERS);
-      setSelectedBidderId(BLANK_BIDDERS[0].id);
-      setSingleEvaluations([]);
-      setComparativeEvaluation(null);
-      setReviewedClausesData(null);
-      setEvaluationError(null);
-      logAuditAction(
-        "New Blank Case Created",
-        "System & Files",
-        "Dealing Officer initialized a fresh blank case for custom document upload and evaluation",
-        undefined,
-        "System State",
-        "Case Reset"
-      );
-      setActiveTab("setup");
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: "Start New Blank Case?",
+      message: "All current tender metadata, uploaded clauses, and bidder deviations will be cleared to initialize a blank workspace.",
+      confirmLabel: "Initialize Blank Case",
+      onConfirm: () => {
+        setMetadata(BLANK_TENDER_METADATA);
+        setDocuments(BLANK_DOCUMENTS);
+        setBidders(BLANK_BIDDERS);
+        setSelectedBidderId(BLANK_BIDDERS[0].id);
+        setSingleEvaluations([]);
+        setComparativeEvaluation(null);
+        setReviewedClausesData(null);
+        setEvaluationError(null);
+        logAuditAction(
+          "New Blank Case Created",
+          "System & Files",
+          "Dealing Officer initialized a fresh blank case for custom document upload and evaluation",
+          undefined,
+          "System State",
+          "Case Reset"
+        );
+        setActiveTab("setup");
+        setConfirmDialog(null);
+        showToast("Fresh blank case initialized successfully.", "info");
+      },
+    });
   };
 
   // Reset all data
   const handleReset = () => {
-    if (window.confirm("Are you sure you want to reset all tender documents and evaluation data?")) {
-      setMetadata(BLANK_TENDER_METADATA);
-      setDocuments(BLANK_DOCUMENTS);
-      setBidders(BLANK_BIDDERS);
-      setSelectedBidderId(BLANK_BIDDERS[0].id);
-      setSingleEvaluations([]);
-      setComparativeEvaluation(null);
-      setReviewedClausesData(null);
-      setEvaluationError(null);
-      logAuditAction(
-        "Workspace Reset Executed",
-        "System & Files",
-        "Dealing Officer cleared all active documents, deviation matrix, and harmonized clauses",
-        undefined,
-        "System State",
-        "Re-initialization"
-      );
-      setActiveTab("setup");
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: "Reset Tender Workspace?",
+      message: "Are you sure you want to reset all active documents, deviation matrix, and harmonized clauses?",
+      confirmLabel: "Reset Workspace",
+      onConfirm: () => {
+        setMetadata(BLANK_TENDER_METADATA);
+        setDocuments(BLANK_DOCUMENTS);
+        setBidders(BLANK_BIDDERS);
+        setSelectedBidderId(BLANK_BIDDERS[0].id);
+        setSingleEvaluations([]);
+        setComparativeEvaluation(null);
+        setReviewedClausesData(null);
+        setEvaluationError(null);
+        logAuditAction(
+          "Workspace Reset Executed",
+          "System & Files",
+          "Dealing Officer cleared all active documents, deviation matrix, and harmonized clauses",
+          undefined,
+          "System State",
+          "Re-initialization"
+        );
+        setActiveTab("setup");
+        setConfirmDialog(null);
+        showToast("Tender workspace reset completed.", "info");
+      },
+    });
   };
 
   // Save entire project to local PC (.sbd-eval file)
@@ -438,7 +460,7 @@ export default function App() {
     setAuditLogs(updatedAuditLogs);
 
     const projectData = {
-      version: "1.0",
+      version: "2.0",
       savedAt: new Date().toISOString(),
       officerProfile,
       metadata,
@@ -449,6 +471,10 @@ export default function App() {
       reviewedClausesData,
       officerDirectives,
       activeFormatTemplate,
+      serviceCriteria,
+      serviceGuidelines,
+      serviceBidders,
+      serviceEvaluationStage,
       auditLogs: updatedAuditLogs,
     };
     const blob = new Blob([JSON.stringify(projectData, null, 2)], {
@@ -483,6 +509,10 @@ export default function App() {
       if (data.activeFormatTemplate !== undefined) {
         setActiveFormatTemplate(data.activeFormatTemplate);
       }
+      if (data.serviceCriteria) setServiceCriteria(data.serviceCriteria);
+      if (data.serviceGuidelines) setServiceGuidelines(data.serviceGuidelines);
+      if (data.serviceBidders && Array.isArray(data.serviceBidders)) setServiceBidders(data.serviceBidders);
+      if (data.serviceEvaluationStage) setServiceEvaluationStage(data.serviceEvaluationStage);
       if (data.auditLogs && Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
       if (data.officerProfile) setOfficerProfile(data.officerProfile);
 
@@ -495,10 +525,15 @@ export default function App() {
         "Audit Chain Continuity"
       );
 
-      alert("Tender evaluation project restored successfully from local file!");
-      setActiveTab(data.singleEvaluations?.length ? "single" : "setup");
+      const targetTab = data.metadata?.tenderType === "SERVICES_O_AND_M"
+        ? "service_eval"
+        : data.singleEvaluations?.length
+        ? "single"
+        : "setup";
+      setActiveTab(targetTab);
+      showToast("Tender evaluation project restored successfully from local file!", "success");
     } catch (err: any) {
-      alert(`Invalid project file: ${err.message}`);
+      showToast(`Invalid project file: ${err.message}`, "error");
     }
     e.target.value = "";
   };
@@ -742,6 +777,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-800">
+      {/* System Migration / New URL Notice */}
+      <MigrationNoticeBanner />
+
       {/* Hidden File Input for Restoring .sbd-eval Projects */}
       <input
         type="file"
@@ -756,7 +794,6 @@ export default function App() {
         metadata={metadata}
         onLoadSample={handleLoadSample}
         onLoadGenericCase={handleLoadGenericCase}
-        onLoadGoodsCase={handleLoadGoodsCase}
         onLoadServicesCase={handleLoadServicesCase}
         onNewBlankCase={handleNewBlankCase}
         onSaveProject={handleSaveProject}
@@ -793,57 +830,77 @@ export default function App() {
               )}
             </button>
 
-            {/* Tab 2: Single Bidder Evaluation */}
-            <button
-              onClick={() => setActiveTab("single")}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                activeTab === "single"
-                  ? "bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-              }`}
-            >
-              <Layers className="w-4 h-4 text-blue-600" />
-              <span>2. Individual Bidder Evaluation</span>
-              {singleEvaluations.length > 0 && (
-                <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded-full font-bold">
-                  {singleEvaluations.length}
+            {/* If Service tender: Show Service Eligibility & Shortfall Evaluation Tab */}
+            {metadata.tenderType === "SERVICES_O_AND_M" ? (
+              <button
+                onClick={() => setActiveTab("service_eval")}
+                className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+                  activeTab === "service_eval"
+                    ? "bg-purple-50 text-purple-800 border border-purple-200 shadow-2xs font-bold"
+                    : "text-purple-700 hover:text-purple-900 hover:bg-purple-50/60"
+                }`}
+              >
+                <Layers className="w-4 h-4 text-purple-600" />
+                <span>2. Service Eligibility &amp; Shortfall Evaluation</span>
+                <span className="text-[10px] bg-purple-200 text-purple-900 px-1.5 py-0.2 rounded-full font-bold">
+                  {serviceBidders.length} Bidders
                 </span>
-              )}
-            </button>
+              </button>
+            ) : (
+              <>
+                {/* Tab 2: Single Bidder Evaluation for EPC */}
+                <button
+                  onClick={() => setActiveTab("single")}
+                  className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+                    activeTab === "single"
+                      ? "bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                >
+                  <Layers className="w-4 h-4 text-blue-600" />
+                  <span>2. Individual Bidder Evaluation</span>
+                  {singleEvaluations.length > 0 && (
+                    <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded-full font-bold">
+                      {singleEvaluations.length}
+                    </span>
+                  )}
+                </button>
 
-            {/* Tab 3: Consolidated Deviation Matrix (Common Study) */}
-            <button
-              onClick={() => setActiveTab("comparative")}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                activeTab === "comparative"
-                  ? "bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-              }`}
-            >
-              <Scale className="w-4 h-4 text-indigo-600" />
-              <span>3. Consolidated Deviation Matrix (Common Study)</span>
-              {comparativeEvaluation && (
-                <span className="w-2 h-2 rounded-full bg-indigo-500" />
-              )}
-            </button>
+                {/* Tab 3: Consolidated Deviation Matrix for EPC */}
+                <button
+                  onClick={() => setActiveTab("comparative")}
+                  className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+                    activeTab === "comparative"
+                      ? "bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                >
+                  <Scale className="w-4 h-4 text-indigo-600" />
+                  <span>3. Consolidated Deviation Matrix</span>
+                  {comparativeEvaluation && (
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                  )}
+                </button>
 
-            {/* Tab 4: Reviewed / Harmonized Clauses */}
-            <button
-              onClick={() => setActiveTab("harmonized")}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                activeTab === "harmonized"
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-              }`}
-            >
-              <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span>4. Reviewed Clauses &amp; Addendum</span>
-              {reviewedClausesData && (
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              )}
-            </button>
+                {/* Tab 4: Reviewed / Harmonized Clauses for EPC */}
+                <button
+                  onClick={() => setActiveTab("harmonized")}
+                  className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+                    activeTab === "harmonized"
+                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span>4. Reviewed Clauses &amp; Addendum</span>
+                  {reviewedClausesData && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  )}
+                </button>
+              </>
+            )}
 
-            {/* Tab 5: Dealing Officer AI Chatbot */}
+            {/* Tab: Dealing Officer AI Chatbot */}
             <button
               onClick={() => setActiveTab("chat")}
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
@@ -853,13 +910,13 @@ export default function App() {
               }`}
             >
               <Bot className="w-4 h-4 text-amber-400" />
-              <span>5. Dealing Officer Chatbot</span>
+              <span>Dealing Officer Chatbot</span>
               <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded-full">
                 Persistent
               </span>
             </button>
 
-            {/* Tab 6: Audit Trail & Statutory Log */}
+            {/* Tab: Audit Trail & Statutory Log */}
             <button
               id="nav-tab-audit"
               onClick={() => setActiveTab("audit")}
@@ -870,7 +927,7 @@ export default function App() {
               }`}
             >
               <History className="w-4 h-4 text-emerald-400" />
-              <span>6. Audit Trail</span>
+              <span>Audit Trail</span>
               {auditLogs.length > 0 && (
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded-full font-bold">
                   {auditLogs.length}
@@ -913,7 +970,6 @@ export default function App() {
             isEvaluating={isEvaluating}
             evaluationStep={evaluationStep}
             onLoadGenericCase={handleLoadGenericCase}
-            onLoadGoodsCase={handleLoadGoodsCase}
             onLoadServicesCase={handleLoadServicesCase}
             onNewBlankCase={handleNewBlankCase}
             onLoadSample={handleLoadSample}
@@ -921,7 +977,23 @@ export default function App() {
           />
         )}
 
-        {/* Tab 2: Single Bidder Evaluation */}
+        {/* Tab: Service & O&M Eligibility & Shortfall Evaluation */}
+        {activeTab === "service_eval" && (
+          <ServiceEvaluationTab
+            metadata={metadata}
+            criteria={serviceCriteria}
+            setCriteria={setServiceCriteria}
+            guidelines={serviceGuidelines}
+            setGuidelines={setServiceGuidelines}
+            bidders={serviceBidders}
+            setBidders={setServiceBidders}
+            evaluationStage={serviceEvaluationStage}
+            setEvaluationStage={setServiceEvaluationStage}
+            onLogAudit={logAuditAction}
+          />
+        )}
+
+        {/* Tab 2: Single Bidder Evaluation (EPC) */}
         {activeTab === "single" && (
           <SingleBidderTab
             evaluations={singleEvaluations}
@@ -1020,10 +1092,18 @@ export default function App() {
               setAuditLogs((prev) => [newEntry, ...prev]);
             }}
             onClearLogs={() => {
-              if (window.confirm("Reset all audit trail logs to initial tender baseline?")) {
-                const initLogs = generateInitialAuditLogs(metadata, bidders, officerProfile);
-                setAuditLogs(initLogs);
-              }
+              setConfirmDialog({
+                isOpen: true,
+                title: "Reset Audit Trail Logs?",
+                message: "Reset all audit trail logs back to initial tender baseline? Historical log entries will be refreshed.",
+                confirmLabel: "Reset Audit Trail",
+                onConfirm: () => {
+                  const initLogs = generateInitialAuditLogs(metadata, bidders, officerProfile);
+                  setAuditLogs(initLogs);
+                  setConfirmDialog(null);
+                  showToast("Audit trail restored to tender baseline.", "info");
+                },
+              });
             }}
           />
         )}
@@ -1040,14 +1120,14 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2 justify-center sm:justify-start">
                 <span className="font-bold text-slate-200 text-sm">
-                  Tender Deviation Evaluator
+                  Tender Evaluation Tool
                 </span>
                 <span className="bg-slate-800 text-cyan-300 text-[10px] px-2 py-0.5 rounded font-mono border border-slate-700">
-                  TURNKEY / EPC
+                  EPC &amp; SERVICES
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Universal Public Procurement &amp; Contract Deviation Resolution Engine
+                Comprehensive Public Sector Tender Evaluation &amp; Contract Compliance System
               </p>
             </div>
           </div>
@@ -1131,6 +1211,62 @@ export default function App() {
         isOpen={isAndroidModalOpen}
         onClose={() => setIsAndroidModalOpen(false)}
       />
+
+      {/* In-App Confirmation Modal */}
+      {confirmDialog && confirmDialog.isOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">{confirmDialog.title}</h3>
+                <p className="text-xs text-slate-500">Tender Administration Confirmation</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">{confirmDialog.message}</p>
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDialog.onConfirm}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-xs"
+              >
+                {confirmDialog.confirmLabel || "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global In-App Toast Notification */}
+      {toastMessage && (
+        <div
+          className={`fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-xs font-semibold animate-in slide-in-from-bottom-3 duration-200 border transition-all ${
+            toastMessage.type === "success"
+              ? "bg-emerald-950 text-emerald-100 border-emerald-600"
+              : toastMessage.type === "error"
+              ? "bg-rose-950 text-rose-100 border-rose-600"
+              : "bg-slate-900 text-slate-100 border-slate-700"
+          }`}
+        >
+          <CheckCircle className={`w-4 h-4 shrink-0 ${toastMessage.type === "success" ? "text-emerald-400" : toastMessage.type === "error" ? "text-rose-400" : "text-cyan-400"}`} />
+          <span>{toastMessage.text}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="ml-2 p-0.5 text-slate-400 hover:text-white rounded cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

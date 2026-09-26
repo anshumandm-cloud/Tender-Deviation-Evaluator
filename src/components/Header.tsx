@@ -12,7 +12,6 @@ import {
   Briefcase,
   Smartphone,
   HelpCircle,
-  Package,
   Wrench,
 } from "lucide-react";
 import { TenderMetadata } from "../types";
@@ -22,7 +21,6 @@ interface HeaderProps {
   metadata: TenderMetadata;
   onLoadSample: () => void;
   onLoadGenericCase: () => void;
-  onLoadGoodsCase?: () => void;
   onLoadServicesCase?: () => void;
   onNewBlankCase: () => void;
   onSaveProject: () => void;
@@ -38,7 +36,6 @@ export const Header: React.FC<HeaderProps> = ({
   metadata,
   onLoadSample,
   onLoadGenericCase,
-  onLoadGoodsCase,
   onLoadServicesCase,
   onNewBlankCase,
   onSaveProject,
@@ -59,7 +56,9 @@ export const Header: React.FC<HeaderProps> = ({
             {metadata.organization || "Enter Organization Name"}
           </span>
           <span className="text-slate-500">|</span>
-          <span className="text-cyan-300 font-mono">TURNKEY / EPC CASE EVALUATOR</span>
+          <span className="text-cyan-300 font-mono">
+            {metadata.tenderType === "SERVICES_O_AND_M" ? "SERVICE & O&M CONTRACT EVALUATOR" : "EPC / TURNKEY CONTRACT EVALUATOR"}
+          </span>
           <span className="text-slate-500">|</span>
           <span className="text-slate-400 text-[11px]">Author: <strong className="text-blue-400 font-bold">ADM</strong></span>
         </div>
@@ -102,10 +101,10 @@ export const Header: React.FC<HeaderProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                Tender Deviation Evaluator
+                Tender Evaluation Tool
               </h1>
               <span className="bg-blue-900/70 border border-blue-400/30 text-blue-200 text-[11px] px-2 py-0.5 rounded-full font-medium">
-                Universal Case Evaluator
+                EPC-Works &amp; Services
               </span>
             </div>
             <p className="text-xs text-slate-400 truncate max-w-xl">
@@ -147,17 +146,6 @@ export const Header: React.FC<HeaderProps> = ({
             <Briefcase className="w-3.5 h-3.5 text-cyan-400" />
             <span>EPC Works</span>
           </button>
-
-          {onLoadGoodsCase && (
-            <button
-              onClick={onLoadGoodsCase}
-              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-md border border-slate-700 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-              title="Load Goods / Capital Equipment Supply case evaluation"
-            >
-              <Package className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Goods Supply</span>
-            </button>
-          )}
 
           {onLoadServicesCase && (
             <button
