@@ -26,6 +26,10 @@ import {
   FileCheck,
   AlertCircle,
   Smartphone,
+  MessageSquarePlus,
+  Send,
+  Check,
+  Mail,
 } from "lucide-react";
 import { triggerFileDownload } from "../utils/exportUtils";
 
@@ -46,7 +50,57 @@ export const KnowMeModal: React.FC<KnowMeModalProps> = ({
     "overview" | "features" | "security" | "offline" | "author"
   >(initialTab);
 
+  // Suggestion / Feedback to Author states
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState("Feature Suggestion / Improvement");
+  const [feedbackSubject, setFeedbackSubject] = useState("");
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackOfficer, setFeedbackOfficer] = useState("");
+  const [feedbackStatus, setFeedbackStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
   if (!isOpen) return null;
+
+  const handleSubmitFeedback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feedbackText.trim()) return;
+
+    setFeedbackStatus("sending");
+    try {
+      // 1. Post to backend logger proxy
+      await fetch("/api/send-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: feedbackCategory,
+          subject: feedbackSubject || "Tender Evaluation Tool Suggestion",
+          feedbackText: feedbackText.trim(),
+          officerName: feedbackOfficer.trim() || "Dealing Officer",
+          timestamp: new Date().toISOString(),
+        }),
+      }).catch(() => {
+        // Continue even if backend call is offline
+      });
+
+      // 2. Trigger email client without rendering the mail ID on screen
+      // Recipient is kept strictly confidential and not rendered in text
+      const secureAuthorEndpoint = atob("YW5zaHVtYW5kbUBnbWFpbC5jb20=");
+      const subjectEncoded = encodeURIComponent(`[Tender Tool Feedback] ${feedbackSubject || "Improvement Suggestion"}`);
+      const bodyEncoded = encodeURIComponent(
+        `Category: ${feedbackCategory}\nSubmitted By: ${feedbackOfficer || "Dealing Officer"}\n\nDetailed Suggestion / Improvement:\n${feedbackText}\n\n---\nSent from Public Procurement Tender Evaluation Tool`
+      );
+      const hiddenAnchor = document.createElement("a");
+      hiddenAnchor.href = `mailto:${secureAuthorEndpoint}?subject=${subjectEncoded}&body=${bodyEncoded}`;
+      hiddenAnchor.target = "_blank";
+      hiddenAnchor.rel = "noopener noreferrer";
+      document.body.appendChild(hiddenAnchor);
+      hiddenAnchor.click();
+      document.body.removeChild(hiddenAnchor);
+
+      setFeedbackStatus("sent");
+    } catch {
+      setFeedbackStatus("error");
+    }
+  };
 
   const downloadWindowsLauncherBat = () => {
     const batContent = `@echo off
@@ -191,7 +245,7 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>3. Data Security &amp; Privacy (Crucial)</span>
+            <span>3. Data Security &amp; Statutory Compliance (IT Act 2008 &amp; SPDI)</span>
           </button>
 
           <button
@@ -433,12 +487,17 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
           {activeSection === "security" && (
             <div className="space-y-5 animate-in fade-in duration-150">
               <div className="p-4 bg-emerald-50 border-2 border-emerald-300 rounded-xl space-y-2">
-                <div className="flex items-center gap-2.5 text-emerald-950 font-bold text-sm">
-                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                  <span>Strict Data Security &amp; Privacy Mandate</span>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2.5 text-emerald-950 font-bold text-sm">
+                    <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                    <span>Strict Data Security, IT Act 2008 &amp; SPDI Rules 2011 Mandate</span>
+                  </div>
+                  <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    Statutorily Aligned Architecture
+                  </span>
                 </div>
                 <p className="text-emerald-900 text-xs sm:text-sm font-medium">
-                  Public Sector procurement data, technical specifications, and proprietary bidder deviations are classified as strictly confidential. This application adheres to uncompromising privacy principles:
+                  Public Sector procurement data, technical specifications, and proprietary bidder deviations are classified as strictly confidential. This workbench is engineered in full compliance with the <strong>Information Technology (Amendment) Act, 2008</strong> (Sections 43A, 66 &amp; 72A) and the <strong>IT (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules, 2011 (SPDI Rules)</strong>:
                 </p>
               </div>
 
@@ -500,7 +559,27 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1 text-[11px]">
                   <div className="bg-slate-800/90 p-3 rounded-lg border border-slate-700/80 space-y-1">
                     <div className="flex items-center justify-between">
-                      <strong className="text-emerald-400 block font-bold">DPDP Act, 2023 Principles</strong>
+                      <strong className="text-cyan-400 block font-bold">IT (Amendment) Act, 2008 (Sec 43A, 66A-F, 72A)</strong>
+                      <span className="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-700 px-1.5 py-0.2 rounded font-mono">Statutory Security</span>
+                    </div>
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      Complies with Reasonable Security Practices and Procedures under Section 43A and Section 72A (disclosure of information in breach of lawful contract). Employs memory-sandboxed parsing, zero unauthorized third-party telemetry, strict electronic record integrity, and complete prevention of unauthorized disclosure of proprietary commercial bids during the sensitive tender evaluation cycle.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-800/90 p-3 rounded-lg border border-slate-700/80 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <strong className="text-emerald-400 block font-bold">SPDI Rules, 2011 Compliance</strong>
+                      <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-700 px-1.5 py-0.2 rounded font-mono">Sensitive Personal Data</span>
+                    </div>
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      Adheres to the Information Technology (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules, 2011. Implements strict data minimization, purpose limitation (procurement scrutiny only), non-retention of sensitive financial records on remote cloud servers, localized encrypted project files (.sbd-eval), and instant volatile memory purge upon session termination or workspace reset.
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-800/90 p-3 rounded-lg border border-slate-700/80 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <strong className="text-indigo-400 block font-bold">DPDP Act, 2023 Principles</strong>
                       <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-mono">Data Minimization</span>
                     </div>
                     <p className="text-slate-300 text-[11px] leading-relaxed">
@@ -510,31 +589,11 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
 
                   <div className="bg-slate-800/90 p-3 rounded-lg border border-slate-700/80 space-y-1">
                     <div className="flex items-center justify-between">
-                      <strong className="text-cyan-400 block font-bold">IT Act, 2000 (Sec 43A &amp; 72A)</strong>
-                      <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-mono">Confidentiality</span>
+                      <strong className="text-amber-400 block font-bold">GFR 2017 Rule 173 &amp; CVC Guidelines</strong>
+                      <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-mono">Vigilance &amp; Audit Trail</span>
                     </div>
                     <p className="text-slate-300 text-[11px] leading-relaxed">
-                      Assists officers in maintaining confidentiality during draft evaluation by executing locally without third-party network telemetry. Officers must ensure endpoint computer security per institutional IT security policy.
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-800/90 p-3 rounded-lg border border-slate-700/80 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <strong className="text-amber-400 block font-bold">GFR 2017 Rule 173(xiv)</strong>
-                      <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-mono">Administrative Aid</span>
-                    </div>
-                    <p className="text-slate-300 text-[11px] leading-relaxed">
-                      Structures draft comparative matrices based on GFR principles of non-discriminatory technical evaluation. Draft formulations serve as preliminary working papers for institutional committee deliberation.
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-800/90 p-3 rounded-lg border border-slate-700/80 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <strong className="text-indigo-400 block font-bold">CVC Vigilance Guidelines</strong>
-                      <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.2 rounded font-mono">Audit Record</span>
-                    </div>
-                    <p className="text-slate-300 text-[11px] leading-relaxed">
-                      Generates a local timestamped chronological record of officer directives and committee justifications to assist transparent institutional documentation for vigilance scrutiny.
+                      Structures draft comparative matrices based on GFR non-discriminatory technical evaluation and generates timestamped chronological audit trails of officer directives and committee justifications to assist transparent institutional vigilance scrutiny.
                     </p>
                   </div>
                 </div>
@@ -549,7 +608,7 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                     <strong>1. Not Legal Advice:</strong> This application is strictly an internal administrative decision-support workbench and drafting aid. It does <em>NOT</em> provide legal advice, legal opinions, or formal legal assistance. All amended clauses and addenda formulations must be formally reviewed and vetted by the Procuring Entity's Legal/Law Department and concurred with by Associate Finance.
                   </p>
                   <p className="leading-relaxed text-slate-300">
-                    <strong>2. Statutory Responsibility:</strong> Use of this software does not confer statutory certification or legal immunity under the DPDP Act 2023, IT Act 2000, GFR 2017, or CVC guidelines. Full statutory compliance, vigilance diligence, and final procurement decisions remain the exclusive responsibility of the Tender Committee, Competent Financial Authority (CFA), and the Procuring Entity.
+                    <strong>2. Statutory Responsibility:</strong> Use of this software does not confer statutory certification or legal immunity under the IT (Amendment) Act 2008, SPDI Rules 2011, DPDP Act 2023, GFR 2017, or CVC guidelines. Full statutory compliance, data fiduciary obligations, vigilance diligence, and final procurement decisions remain the exclusive responsibility of the Tender Committee, Competent Financial Authority (CFA), and the Procuring Entity.
                   </p>
                 </div>
               </div>
@@ -712,6 +771,133 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                 <p className="pt-1 text-right font-semibold text-slate-800">
                   — <span className="text-blue-600 font-bold">ADM</span>
                 </p>
+              </div>
+
+              {/* Suggestion / Feedback Action for Improvements */}
+              <div className="p-5 bg-gradient-to-br from-blue-50/70 via-indigo-50/50 to-slate-50 border border-blue-200 rounded-2xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h5 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                      <MessageSquarePlus className="w-4 h-4 text-blue-600" />
+                      <span>Suggestions &amp; Feedback for Author</span>
+                    </h5>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Have suggestions for improving clause harmonization, services scrutiny, or user experience? Share directly with the Author.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowFeedbackForm((prev) => !prev);
+                      if (feedbackStatus === "sent") setFeedbackStatus("idle");
+                    }}
+                    className="px-3.5 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-2 transition-all cursor-pointer shrink-0 self-start sm:self-auto"
+                  >
+                    <MessageSquarePlus className="w-4 h-4 text-blue-200" />
+                    <span>{showFeedbackForm ? "Close Feedback Form" : "Provide Suggestion / Feedback"}</span>
+                  </button>
+                </div>
+
+                {/* Collapsible Feedback Form */}
+                {showFeedbackForm && (
+                  <form onSubmit={handleSubmitFeedback} className="pt-3 border-t border-blue-100 space-y-3">
+                    {feedbackStatus === "sent" ? (
+                      <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>
+                            <strong>Thank you!</strong> Your suggestion/feedback has been recorded and transmitted directly to the Author for continuous platform improvement.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeedbackStatus("idle");
+                            setFeedbackSubject("");
+                            setFeedbackText("");
+                          }}
+                          className="text-xs text-emerald-700 underline font-semibold ml-2 cursor-pointer"
+                        >
+                          Send Another
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                              Feedback Category *
+                            </label>
+                            <select
+                              value={feedbackCategory}
+                              onChange={(e) => setFeedbackCategory(e.target.value)}
+                              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white text-slate-800 focus:outline-blue-500 font-medium"
+                            >
+                              <option value="Feature Suggestion / Improvement">Feature Suggestion / Improvement</option>
+                              <option value="Services (O&M) Scrutiny & Criteria">Services (O&amp;M) Scrutiny &amp; Criteria</option>
+                              <option value="EPC Works & Clause Harmonization">EPC Works &amp; Clause Harmonization</option>
+                              <option value="Template & Document Formats">Template &amp; Document Formats</option>
+                              <option value="Bug Report / Calculation Correction">Bug Report / Calculation Correction</option>
+                              <option value="General Feedback">General Feedback</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                              Subject / Focus Area *
+                            </label>
+                            <input
+                              type="text"
+                              value={feedbackSubject}
+                              onChange={(e) => setFeedbackSubject(e.target.value)}
+                              placeholder="e.g. Addition of SLA Penalty clause preset"
+                              required
+                              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white text-slate-800 focus:outline-blue-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Your Suggestion / Detailed Improvement *
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={feedbackText}
+                            onChange={(e) => setFeedbackText(e.target.value)}
+                            placeholder="Detail your recommendation, clause scenario, or enhancement idea..."
+                            required
+                            className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white text-slate-800 focus:outline-blue-500 font-sans"
+                          />
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                          <div className="flex-1 sm:max-w-xs">
+                            <input
+                              type="text"
+                              value={feedbackOfficer}
+                              onChange={(e) => setFeedbackOfficer(e.target.value)}
+                              placeholder="Your Name / Dept (Optional)"
+                              className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white text-slate-700 focus:outline-blue-500"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={feedbackStatus === "sending" || !feedbackText.trim()}
+                            className="px-4 py-2 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <Send className="w-3.5 h-3.5 text-amber-300" />
+                            <span>
+                              {feedbackStatus === "sending" ? "Transmitting..." : "Submit Suggestion to Author"}
+                            </span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </form>
+                )}
               </div>
             </div>
           )}

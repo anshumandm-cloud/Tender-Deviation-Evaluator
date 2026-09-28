@@ -38,6 +38,7 @@ import {
   AuditCategory,
   OfficerDirective,
   UploadedFormatTemplate,
+  TenderProcurementType,
 } from "./types";
 import {
   applyDirectiveToReviewedClauses,
@@ -77,24 +78,27 @@ import {
 import { triggerFileDownload } from "./utils/exportUtils";
 
 export default function App() {
-  // Navigation
+  // Navigation - default opening tab is Services (O&M)
   const [activeTab, setActiveTab] = useState<
     "setup" | "single" | "comparative" | "harmonized" | "service_eval" | "chat" | "audit"
-  >("setup");
+  >("comparative");
 
-  // Tender Setup States
-  const [metadata, setMetadata] = useState<TenderMetadata>(SAMPLE_TENDER_METADATA);
-  const [documents, setDocuments] = useState<TenderDocuments>(DEFAULT_SAMPLE_DOCUMENTS);
-  const [bidders, setBidders] = useState<BidderInput[]>(DEFAULT_SAMPLE_BIDDERS);
+  // Tender Setup States - Default to Services (O&M)
+  const [metadata, setMetadata] = useState<TenderMetadata>(SERVICES_TENDER_METADATA);
+  const [documents, setDocuments] = useState<TenderDocuments>(SERVICES_SAMPLE_DOCUMENTS);
+  const [bidders, setBidders] = useState<BidderInput[]>(SERVICES_SAMPLE_BIDDERS);
 
   // Dealing Officer Profile & Audit Logs States
   const [officerProfile, setOfficerProfile] = useState<string>(() => {
     try {
       const saved = localStorage.getItem("tender_dealing_officer");
-      return saved && saved.trim() ? saved : DEFAULT_DEALING_OFFICER;
+      if (saved && saved.trim() && !saved.includes("Anshuman")) {
+        return saved;
+      }
     } catch {
       return DEFAULT_DEALING_OFFICER;
     }
+    return DEFAULT_DEALING_OFFICER;
   });
 
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => {
@@ -102,12 +106,17 @@ export default function App() {
       const saved = localStorage.getItem("tender_audit_logs");
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((log: AuditLogEntry) => ({
+            ...log,
+            officer: log.officer && log.officer.includes("Anshuman") ? DEFAULT_DEALING_OFFICER : log.officer,
+          }));
+        }
       }
     } catch {
       // fallback
     }
-    return generateInitialAuditLogs(SAMPLE_TENDER_METADATA, DEFAULT_SAMPLE_BIDDERS, DEFAULT_DEALING_OFFICER);
+    return generateInitialAuditLogs(SERVICES_TENDER_METADATA, SERVICES_SAMPLE_BIDDERS, DEFAULT_DEALING_OFFICER);
   });
 
   // Persist Dealing Officer and Audit Logs in localStorage
@@ -165,9 +174,12 @@ export default function App() {
   const [serviceEvaluationStage, setServiceEvaluationStage] = useState<
     "ROUND_1_INITIAL" | "SHORTFALL_ISSUED" | "ROUND_2_SHORTFALL_EVAL" | "FINAL_ACCEPTED"
   >("ROUND_1_INITIAL");
+  const [serviceSubMode, setServiceSubMode] = useState<
+    "consolidated" | "individual" | "letters" | "tampering" | "banning"
+  >("consolidated");
 
   // UI States
-  const [selectedBidderId, setSelectedBidderId] = useState<string>(DEFAULT_SAMPLE_BIDDERS[0].id);
+  const [selectedBidderId, setSelectedBidderId] = useState<string>(SAMPLE_SERVICE_BIDDERS[0]?.bidderId || "bidder-1");
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
   const [evaluationStep, setEvaluationStep] = useState<string>("");
   const [isGeneratingHarmonized, setIsGeneratingHarmonized] = useState<boolean>(false);
@@ -371,7 +383,11 @@ export default function App() {
     setServiceCriteria(SAMPLE_SERVICES_CRITERIA);
     setServiceBidders(SAMPLE_SERVICE_BIDDERS);
     setServiceEvaluationStage("ROUND_1_INITIAL");
+    setServiceSubMode("consolidated");
     setSelectedBidderId(SAMPLE_SERVICE_BIDDERS[0].bidderId);
+    setSingleEvaluations([]);
+    setComparativeEvaluation(null);
+    setReviewedClausesData(null);
     setEvaluationError(null);
     logAuditAction(
       "Services (O&M) Eligibility Case Loaded",
@@ -381,18 +397,116 @@ export default function App() {
       "Tender Case",
       "Services Template Initialization"
     );
-    setActiveTab("service_eval");
+    setActiveTab("comparative");
+  };
+
+  // Switch procurement type and cleanly reset data in other tabs
+  const handleProcurementTypeChange = (newType: TenderProcurementType) => {
+    if (newType === metadata.tenderType) return;
+
+    const isCurrentBlank = !metadata.packageTitle.trim() || metadata.packageTitle === "Enter Case Name";
+
+    if (newType === "SERVICES_O_AND_M") {
+      setMetadata((prev) => ({
+        ...prev,
+        tenderType: "SERVICES_O_AND_M",
+        packageTitle: isCurrentBlank ? "" : SERVICES_TENDER_METADATA.packageTitle,
+        completionPeriodMonths: isCurrentBlank ? "" : "36",
+      }));
+
+      // Reset EPC specific evaluations in other tabs
+      setSingleEvaluations([]);
+      setComparativeEvaluation(null);
+      setReviewedClausesData(null);
+
+      // If currently blank (e.g. from New Blank Case), initialize blank Services state
+      if (isCurrentBlank) {
+        setDocuments(BLANK_DOCUMENTS);
+        setBidders(BLANK_BIDDERS);
+        setSelectedBidderId(BLANK_BIDDERS[0].id);
+        setServiceCriteria(BLANK_SERVICES_CRITERIA);
+        setServiceBidders(BLANK_SERVICE_BIDDERS);
+        setServiceEvaluationStage("ROUND_1_INITIAL");
+      } else {
+        // Load standard Services template
+        setDocuments(SERVICES_SAMPLE_DOCUMENTS);
+        setBidders(SERVICES_SAMPLE_BIDDERS);
+        setSelectedBidderId(SAMPLE_SERVICE_BIDDERS[0].bidderId);
+        setServiceCriteria(SAMPLE_SERVICES_CRITERIA);
+        setServiceBidders(SAMPLE_SERVICE_BIDDERS);
+        setServiceEvaluationStage("ROUND_1_INITIAL");
+      }
+      setServiceSubMode("consolidated");
+
+      logAuditAction(
+        "Switched Procurement Type to Services (O&M)",
+        "Metadata",
+        "Dealing Officer switched contract type to Services (O&M). Other evaluation tabs reset.",
+        isCurrentBlank ? "Initialized clean blank Services workspace" : "Initialized Services template baseline",
+        "Procurement Type",
+        "Case Reconfiguration"
+      );
+      showToast("Switched to Services (O&M). Other tab data reset.", "info");
+    } else {
+      // EPC_TURNKEY
+      setMetadata((prev) => ({
+        ...prev,
+        tenderType: "EPC_TURNKEY",
+        packageTitle: isCurrentBlank ? "" : GENERIC_TENDER_METADATA.packageTitle,
+      }));
+
+      // Reset Services data in other tabs
+      setServiceCriteria(BLANK_SERVICES_CRITERIA);
+      setServiceBidders(BLANK_SERVICE_BIDDERS);
+      setServiceEvaluationStage("ROUND_1_INITIAL");
+
+      if (isCurrentBlank) {
+        setDocuments(BLANK_DOCUMENTS);
+        setBidders(BLANK_BIDDERS);
+        setSelectedBidderId(BLANK_BIDDERS[0].id);
+        setSingleEvaluations([]);
+        setComparativeEvaluation(null);
+        setReviewedClausesData(null);
+      } else {
+        setDocuments(DEFAULT_SAMPLE_DOCUMENTS);
+        setBidders(GENERIC_BIDDERS);
+        setSelectedBidderId(GENERIC_BIDDERS[0].id);
+        setSingleEvaluations([
+          generateFallbackSingleEvaluation(GENERIC_BIDDERS[0], GENERIC_TENDER_METADATA),
+        ]);
+        setComparativeEvaluation(
+          generateFallbackComparativeEvaluation(GENERIC_BIDDERS, GENERIC_TENDER_METADATA)
+        );
+        setReviewedClausesData(generateFallbackReviewedClauses(GENERIC_TENDER_METADATA));
+      }
+
+      logAuditAction(
+        "Switched Procurement Type to EPC-Works",
+        "Metadata",
+        "Dealing Officer switched contract type to EPC-Works. Other evaluation tabs reset.",
+        isCurrentBlank ? "Initialized clean blank EPC workspace" : "Initialized generic EPC template baseline",
+        "Procurement Type",
+        "Case Reconfiguration"
+      );
+      showToast("Switched to EPC-Works. Other tab data reset.", "info");
+    }
   };
 
   // Start fresh blank case for any live or draft tender
   const handleNewBlankCase = () => {
+    const currentType = metadata.tenderType || "SERVICES_O_AND_M";
+    const typeLabel = currentType === "SERVICES_O_AND_M" ? "Services (O&M)" : "EPC-Works";
+
     setConfirmDialog({
       isOpen: true,
       title: "Start New Blank Case?",
-      message: "All current tender metadata, uploaded clauses, bidder deviations, and service eligibility records will be cleared to initialize a completely clean workspace.",
+      message: `All current tender metadata, uploaded clauses, bidder deviations, and ${typeLabel} eligibility records will be cleared to initialize a completely clean workspace.`,
       confirmLabel: "Initialize Blank Case",
       onConfirm: () => {
-        setMetadata(BLANK_TENDER_METADATA);
+        setMetadata({
+          ...BLANK_TENDER_METADATA,
+          tenderType: currentType,
+        });
         setDocuments(BLANK_DOCUMENTS);
         setBidders(BLANK_BIDDERS);
         setSelectedBidderId(BLANK_BIDDERS[0].id);
@@ -406,7 +520,7 @@ export default function App() {
         logAuditAction(
           "New Blank Case Created",
           "System & Files",
-          "Dealing Officer initialized a fresh blank case for custom document upload and evaluation (EPC and Services data cleared)",
+          `Dealing Officer initialized a fresh blank case for custom document upload and evaluation (${typeLabel} data cleared)`,
           undefined,
           "System State",
           "Case Reset"
@@ -418,15 +532,21 @@ export default function App() {
     });
   };
 
-  // Reset all data
+  // Reset all data for current active case
   const handleReset = () => {
+    const currentType = metadata.tenderType || "SERVICES_O_AND_M";
+    const typeLabel = currentType === "SERVICES_O_AND_M" ? "Services (O&M)" : "EPC-Works";
+
     setConfirmDialog({
       isOpen: true,
-      title: "Reset Tender Workspace?",
-      message: "Are you sure you want to reset all active documents, deviation matrix, harmonized clauses, and Services (O&M) eligibility records?",
-      confirmLabel: "Reset Workspace",
+      title: `Reset ${typeLabel} Workspace?`,
+      message: `Are you sure you want to reset all active documents, deviation matrix, harmonized clauses, and ${typeLabel} records? Workspace will be cleared to a clean state.`,
+      confirmLabel: `Reset ${typeLabel} Data`,
       onConfirm: () => {
-        setMetadata(BLANK_TENDER_METADATA);
+        setMetadata({
+          ...BLANK_TENDER_METADATA,
+          tenderType: currentType,
+        });
         setDocuments(BLANK_DOCUMENTS);
         setBidders(BLANK_BIDDERS);
         setSelectedBidderId(BLANK_BIDDERS[0].id);
@@ -438,16 +558,16 @@ export default function App() {
         setServiceEvaluationStage("ROUND_1_INITIAL");
         setEvaluationError(null);
         logAuditAction(
-          "Workspace Reset Executed",
+          `Workspace Reset Executed (${typeLabel})`,
           "System & Files",
-          "Dealing Officer cleared all active documents, deviation matrix, harmonized clauses, and Services (O&M) data",
+          `Dealing Officer cleared all active documents, deviation matrix, and ${typeLabel} data`,
           undefined,
           "System State",
           "Re-initialization"
         );
         setActiveTab("setup");
         setConfirmDialog(null);
-        showToast("Tender workspace reset completed.", "info");
+        showToast(`${typeLabel} workspace reset completed.`, "info");
       },
     });
   };
@@ -826,7 +946,7 @@ export default function App() {
         )}
       />
 
-      {/* Navigation Sub-Header Tabs */}
+      {/* Navigation Sub-Header Tabs - Completely Uniform across EPC-Works and Services (O&M) */}
       <div className="bg-white border-b border-slate-200 sticky top-[73px] z-20 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between overflow-x-auto">
           <nav className="flex space-x-1 sm:space-x-2 py-2">
@@ -835,7 +955,7 @@ export default function App() {
               onClick={() => setActiveTab("setup")}
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
                 activeTab === "setup"
-                  ? "bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs"
+                  ? "bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs font-bold"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
@@ -846,82 +966,83 @@ export default function App() {
               )}
             </button>
 
-            {/* If Service tender: Show Service Eligibility & Shortfall Evaluation Tab */}
-            {metadata.tenderType === "SERVICES_O_AND_M" ? (
-              <button
-                onClick={() => setActiveTab("service_eval")}
-                className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                  activeTab === "service_eval"
-                    ? "bg-purple-50 text-purple-800 border border-purple-200 shadow-2xs font-bold"
-                    : "text-purple-700 hover:text-purple-900 hover:bg-purple-50/60"
-                }`}
-              >
-                <Layers className="w-4 h-4 text-purple-600" />
-                <span>2. Service Eligibility &amp; Shortfall Evaluation</span>
-                <span className="text-[10px] bg-purple-200 text-purple-900 px-1.5 py-0.2 rounded-full font-bold">
-                  {serviceBidders.length} Bidders
-                </span>
-              </button>
-            ) : (
-              <>
-                {/* Tab 2: Single Bidder Evaluation for EPC */}
-                <button
-                  onClick={() => setActiveTab("single")}
-                  className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                    activeTab === "single"
-                      ? "bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <Layers className="w-4 h-4 text-blue-600" />
-                  <span>2. Individual Bidder Evaluation</span>
-                  {singleEvaluations.length > 0 && (
-                    <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded-full font-bold">
-                      {singleEvaluations.length}
-                    </span>
-                  )}
-                </button>
+            {/* Tab 2: Individual Evaluation (Bidder Dossier) */}
+            <button
+              onClick={() => {
+                setActiveTab("single");
+                if (metadata.tenderType === "SERVICES_O_AND_M") {
+                  setServiceSubMode("individual");
+                }
+              }}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+                activeTab === "single" || (metadata.tenderType === "SERVICES_O_AND_M" && activeTab === "service_eval" && serviceSubMode === "individual")
+                  ? "bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              }`}
+            >
+              <Layers className="w-4 h-4 text-blue-600" />
+              <span>
+                {metadata.tenderType === "SERVICES_O_AND_M"
+                  ? "2. Individual Bidder Dossier"
+                  : "2. Individual Bidder Evaluation"}
+              </span>
+              <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded-full font-bold">
+                {metadata.tenderType === "SERVICES_O_AND_M" ? serviceBidders.length : singleEvaluations.length || bidders.length}
+              </span>
+            </button>
 
-                {/* Tab 3: Consolidated Deviation Matrix for EPC */}
-                <button
-                  onClick={() => setActiveTab("comparative")}
-                  className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                    activeTab === "comparative"
-                      ? "bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <Scale className="w-4 h-4 text-indigo-600" />
-                  <span>3. Consolidated Deviation Matrix</span>
-                  {comparativeEvaluation && (
-                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                  )}
-                </button>
+            {/* Tab 3: Consolidated Statement / Matrix */}
+            <button
+              onClick={() => {
+                setActiveTab("comparative");
+                if (metadata.tenderType === "SERVICES_O_AND_M") {
+                  setServiceSubMode("consolidated");
+                }
+              }}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+                activeTab === "comparative" || (metadata.tenderType === "SERVICES_O_AND_M" && activeTab === "service_eval" && serviceSubMode === "consolidated")
+                  ? "bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              }`}
+            >
+              <Scale className="w-4 h-4 text-indigo-600" />
+              <span>
+                {metadata.tenderType === "SERVICES_O_AND_M"
+                  ? "3. Consolidated Comparative Statement"
+                  : "3. Consolidated Deviation Matrix"}
+              </span>
+              <span className="w-2 h-2 rounded-full bg-indigo-500" />
+            </button>
 
-                {/* Tab 4: Reviewed / Harmonized Clauses for EPC */}
-                <button
-                  onClick={() => setActiveTab("harmonized")}
-                  className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                    activeTab === "harmonized"
-                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <Sparkles className="w-4 h-4 text-emerald-600" />
-                  <span>4. Reviewed Clauses &amp; Addendum</span>
-                  {reviewedClausesData && (
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  )}
-                </button>
-              </>
-            )}
+            {/* Tab 4: Resolution / Addendum / Formal Letters */}
+            <button
+              onClick={() => {
+                setActiveTab("harmonized");
+                if (metadata.tenderType === "SERVICES_O_AND_M") {
+                  setServiceSubMode("letters");
+                }
+              }}
+              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
+                activeTab === "harmonized" || (metadata.tenderType === "SERVICES_O_AND_M" && activeTab === "service_eval" && serviceSubMode === "letters")
+                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-emerald-600" />
+              <span>
+                {metadata.tenderType === "SERVICES_O_AND_M"
+                  ? "4. Formal Letters & Notices"
+                  : "4. Reviewed Clauses & Addendum"}
+              </span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            </button>
 
             {/* Tab: Dealing Officer AI Chatbot */}
             <button
               onClick={() => setActiveTab("chat")}
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
                 activeTab === "chat"
-                  ? "bg-slate-900 text-white shadow-2xs"
+                  ? "bg-slate-900 text-white shadow-2xs font-bold"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
@@ -938,7 +1059,7 @@ export default function App() {
               onClick={() => setActiveTab("audit")}
               className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
                 activeTab === "audit"
-                  ? "bg-slate-900 text-white shadow-2xs"
+                  ? "bg-slate-900 text-white shadow-2xs font-bold"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
@@ -985,28 +1106,48 @@ export default function App() {
             onRunEvaluation={handleRunEvaluation}
             isEvaluating={isEvaluating}
             evaluationStep={evaluationStep}
+            onProcurementTypeChange={handleProcurementTypeChange}
             onLogAudit={logAuditAction}
           />
         )}
 
-        {/* Tab: Service & O&M Eligibility & Shortfall Evaluation */}
-        {activeTab === "service_eval" && (
-          <ServiceEvaluationTab
-            metadata={metadata}
-            criteria={serviceCriteria}
-            setCriteria={setServiceCriteria}
-            guidelines={serviceGuidelines}
-            setGuidelines={setServiceGuidelines}
-            bidders={serviceBidders}
-            setBidders={setServiceBidders}
-            evaluationStage={serviceEvaluationStage}
-            setEvaluationStage={setServiceEvaluationStage}
-            onLogAudit={logAuditAction}
-          />
-        )}
+        {/* Services (O&M) Mode: Renders ServiceEvaluationTab mapped to active tabs (single, comparative, harmonized) */}
+        {metadata.tenderType === "SERVICES_O_AND_M" &&
+          (activeTab === "single" ||
+            activeTab === "comparative" ||
+            activeTab === "harmonized" ||
+            activeTab === "service_eval") && (
+            <ServiceEvaluationTab
+              metadata={metadata}
+              criteria={serviceCriteria}
+              setCriteria={setServiceCriteria}
+              guidelines={serviceGuidelines}
+              setGuidelines={setServiceGuidelines}
+              bidders={serviceBidders}
+              setBidders={setServiceBidders}
+              evaluationStage={serviceEvaluationStage}
+              setEvaluationStage={setServiceEvaluationStage}
+              viewMode={
+                serviceSubMode === "banning" || serviceSubMode === "tampering"
+                  ? serviceSubMode
+                  : activeTab === "single"
+                  ? "individual"
+                  : activeTab === "harmonized"
+                  ? "letters"
+                  : "consolidated"
+              }
+              setViewMode={(m) => {
+                setServiceSubMode(m);
+                if (m === "individual") setActiveTab("single");
+                else if (m === "letters") setActiveTab("harmonized");
+                else if (m === "consolidated") setActiveTab("comparative");
+              }}
+              onLogAudit={logAuditAction}
+            />
+          )}
 
-        {/* Tab 2: Single Bidder Evaluation (EPC) */}
-        {activeTab === "single" && (
+        {/* EPC_TURNKEY Mode: Renders EPC components */}
+        {metadata.tenderType !== "SERVICES_O_AND_M" && activeTab === "single" && (
           <SingleBidderTab
             evaluations={singleEvaluations}
             selectedBidderId={selectedBidderId}
@@ -1014,8 +1155,7 @@ export default function App() {
           />
         )}
 
-        {/* Tab 3: Comparative Matrix */}
-        {activeTab === "comparative" && (
+        {metadata.tenderType !== "SERVICES_O_AND_M" && activeTab === "comparative" && (
           <ComparativeTab
             comparativeData={comparativeEvaluation}
             officerDirectives={officerDirectives}
@@ -1025,8 +1165,7 @@ export default function App() {
           />
         )}
 
-        {/* Tab 4: Reviewed / Harmonized Clauses */}
-        {activeTab === "harmonized" && (
+        {metadata.tenderType !== "SERVICES_O_AND_M" && activeTab === "harmonized" && (
           <HarmonizedClausesTab
             reviewedData={reviewedClausesData}
             metadata={metadata}

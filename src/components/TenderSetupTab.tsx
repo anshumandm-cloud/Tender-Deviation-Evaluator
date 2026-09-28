@@ -35,6 +35,7 @@ interface TenderSetupTabProps {
   onRunEvaluation: () => void;
   isEvaluating: boolean;
   evaluationStep: string;
+  onProcurementTypeChange?: (newType: TenderProcurementType) => void;
   onLogAudit?: (
     action: string,
     category: AuditCategory,
@@ -55,6 +56,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
   onRunEvaluation,
   isEvaluating,
   evaluationStep,
+  onProcurementTypeChange,
   onLogAudit,
 }) => {
   const [sbdParseError, setSbdParseError] = useState<string | null>(null);
@@ -63,6 +65,13 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
   const [showDriveInput, setShowDriveInput] = useState<"sbd" | "nit" | null>(null);
   const [driveUrl, setDriveUrl] = useState("");
   const [setupFeedback, setSetupFeedback] = useState<{ message: string; type: "error" | "info" } | null>(null);
+
+  // Supplementary Reference Documents state
+  const [isAddingSuppDoc, setIsAddingSuppDoc] = useState(false);
+  const [suppCategory, setSuppCategory] = useState<
+    "Corrigendum" | "Pre-Bid Minutes" | "Technical Scope" | "Special Conditions" | "General Reference"
+  >("Corrigendum");
+  const suppFileInputRef = useRef<HTMLInputElement>(null);
 
   const sbdFileInputRef = useRef<HTMLInputElement>(null);
   const nitFileInputRef = useRef<HTMLInputElement>(null);
@@ -73,6 +82,61 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
     setTimeout(() => {
       setSetupFeedback((cur) => (cur?.message === message ? null : cur));
     }, 4500);
+  };
+
+  // Upload Supplementary Reference Document (Corrigendum, Pre-Bid Minutes, Scope)
+  const handleSupplementaryDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const parsed = await parseUploadedFile(file);
+      const newDoc = {
+        id: `supp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: parsed.fileName,
+        fileType: parsed.fileType,
+        charCount: parsed.charCount,
+        uploadedAt: new Date().toISOString().split("T")[0],
+        category: suppCategory,
+        extractedText: parsed.text,
+      };
+
+      setDocuments((prev) => ({
+        ...prev,
+        supplementaryDocs: [...(prev.supplementaryDocs || []), newDoc],
+      }));
+
+      onLogAudit?.(
+        "Uploaded Supplementary Reference Document",
+        "Tender Documents",
+        `Attached additional reference document [${suppCategory}]: "${parsed.fileName}" (${formatChars(parsed.charCount)})`,
+        `Category: ${suppCategory} | Format: .${parsed.fileType} | Total size: ${parsed.charCount.toLocaleString()} chars`,
+        "Supplementary Reference",
+        "Record Completeness"
+      );
+
+      showFeedback(`Successfully attached "${parsed.fileName}" under ${suppCategory}.`, "info");
+      setIsAddingSuppDoc(false);
+    } catch (err: any) {
+      showFeedback(`Failed to parse supplementary file: ${err.message}`, "error");
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveSupplementaryDoc = (docId: string, docName: string) => {
+    setDocuments((prev) => ({
+      ...prev,
+      supplementaryDocs: (prev.supplementaryDocs || []).filter((d) => d.id !== docId),
+    }));
+    onLogAudit?.(
+      "Removed Supplementary Reference Document",
+      "Tender Documents",
+      `Removed supplementary reference document: "${docName}"`,
+      undefined,
+      "Supplementary Reference",
+      "Record Management"
+    );
+    showFeedback(`Removed supplementary reference document "${docName}".`, "info");
   };
 
   // Format character count to Indian Lakhs/thousands for clarity
@@ -330,23 +394,27 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
               Procurement / Contract Type *
             </label>
             <select
-              value={metadata.tenderType || "EPC_TURNKEY"}
+              value={metadata.tenderType || "SERVICES_O_AND_M"}
               onChange={(e) => {
                 const newType = e.target.value as TenderProcurementType;
-                setMetadata({ ...metadata, tenderType: newType });
-                onLogAudit?.(
-                  "Updated Procurement Type",
-                  "Metadata",
-                  `Changed Procurement Type to: "${newType}"`,
-                  undefined,
-                  "Tender Identification",
-                  "Statutory Metadata"
-                );
+                if (onProcurementTypeChange) {
+                  onProcurementTypeChange(newType);
+                } else {
+                  setMetadata({ ...metadata, tenderType: newType });
+                  onLogAudit?.(
+                    "Updated Procurement Type",
+                    "Metadata",
+                    `Changed Procurement Type to: "${newType}"`,
+                    undefined,
+                    "Tender Identification",
+                    "Statutory Metadata"
+                  );
+                }
               }}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white font-medium text-slate-800"
             >
-              <option value="EPC_TURNKEY">EPC / Turnkey Contracts (GCC &amp; SCC)</option>
-              <option value="SERVICES_O_AND_M">O&amp;M / Facility / Non-Consulting Services (SLA &amp; Eligibility)</option>
+              <option value="SERVICES_O_AND_M">Services (O&amp;M) / Non-Consulting Services (SLA &amp; Eligibility)</option>
+              <option value="EPC_TURNKEY">EPC-Works / Turnkey Contracts (GCC &amp; SCC)</option>
             </select>
           </div>
 
@@ -467,7 +535,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
         </div>
       </div>
 
-      {/* Reference Documents Upload (SBD & NIT/ITB) */}
+      {/* Reference Documents Upload (SBD / GCC & NIT/ITB) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
@@ -476,10 +544,14 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
             </div>
             <div>
               <h2 className="text-base font-semibold text-slate-900">
-                Upload Reference Documents (SBD &amp; NIT / ITB)
+                {metadata.tenderType === "SERVICES_O_AND_M"
+                  ? "Upload Reference Documents (GCC & NIT / ITB)"
+                  : "Upload Reference Documents (SBD & NIT / ITB)"}
               </h2>
               <p className="text-xs text-slate-500">
-                Supports DOCX, PDF, XLSX, TXT from your Local PC or Google Drive (Full-length documents supported without character limitations)
+                {metadata.tenderType === "SERVICES_O_AND_M"
+                  ? "General Conditions of Contract (GCC) is the primary baseline for Services (O&M), along with SLA, NIT, and any Corrigenda"
+                  : "Standard Bidding Document (SBD) is the primary baseline for EPC-Works, along with NIT and technical schedules"}
               </p>
             </div>
           </div>
@@ -487,31 +559,47 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* SBD / SLA Upload Card */}
+          {/* Primary Baseline Document Card: GCC (Services) vs SBD (EPC) */}
           <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-blue-600" />
-                  <span className="text-sm font-semibold text-slate-800">
+                  <span className="text-sm font-bold text-slate-900">
                     {metadata.tenderType === "SERVICES_O_AND_M"
-                      ? "Service Contract & SLA Document"
+                      ? "General Conditions of Contract (GCC) & Service Agreement"
                       : "Standard Bidding Document (SBD)"}
                   </span>
                 </div>
                 {documents.sbdText ? (
                   <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
                     <CheckCircle className="w-3 h-3 text-emerald-600" />
-                    Loaded ({formatChars(documents.sbdCharCount)})
+                    {metadata.tenderType === "SERVICES_O_AND_M" ? "GCC Loaded" : "SBD Loaded"} ({formatChars(documents.sbdCharCount)})
                   </span>
                 ) : (
-                  <span className="text-[11px] text-slate-500">Mandatory Reference</span>
+                  <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                    Mandatory Baseline
+                  </span>
                 )}
               </div>
+
+              {/* Prominence Badge */}
+              <div className="mb-2">
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                  metadata.tenderType === "SERVICES_O_AND_M"
+                    ? "bg-purple-100 text-purple-800 border-purple-300"
+                    : "bg-blue-100 text-blue-800 border-blue-300"
+                }`}>
+                  {metadata.tenderType === "SERVICES_O_AND_M"
+                    ? "Primary Contract Baseline: GCC & SLA"
+                    : "Primary Contract Baseline: SBD (GCC & SCC)"}
+                </span>
+              </div>
+
               <p className="text-xs text-slate-500 mb-3">
                 {metadata.tenderType === "SERVICES_O_AND_M"
-                  ? "Service Level Agreement (SLA), General & Special Conditions of Contract, Minimum Wage escalation, PBG, and penalty clauses."
-                  : "General & Special Conditions of Contract (GCC/SCC), clauses on LD, PBG, Payment Terms, Risk & Cost, Limitation of Liability."}
+                  ? "General Conditions of Contract (GCC), Service Level Agreement (SLA), Minimum Wage escalation, PBG, penalty clauses, and scope conditions."
+                  : "Standard Bidding Document (SBD) with General & Special Conditions of Contract (GCC/SCC), clauses on LD, PBG, Payment Terms, Risk & Cost, Limitation of Liability."}
               </p>
 
               {documents.sbdName && (
@@ -548,10 +636,14 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
                 <button
                   type="button"
                   onClick={() => sbdFileInputRef.current?.click()}
-                  className="flex-1 py-2 px-3 bg-white hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-lg border border-slate-300 shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  className="flex-1 py-2 px-3 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 shadow-sm flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 >
                   <HardDrive className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Upload from PC (.docx, .pdf, .xlsx)</span>
+                  <span>
+                    {metadata.tenderType === "SERVICES_O_AND_M"
+                      ? "Upload GCC Document (.docx, .pdf, .xlsx)"
+                      : "Upload SBD from PC (.docx, .pdf, .xlsx)"}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -692,6 +784,126 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
               )}
             </div>
           </div>
+        </div>
+
+        {/* Prompt to User for Additional Reference Documents */}
+        <div className="mt-5 p-4 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                <Info className="w-4 h-4 text-blue-700" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <span>Reference Documents Verification &amp; Supplementary Upload Prompt</span>
+                  {(documents.supplementaryDocs?.length || 0) > 0 && (
+                    <span className="text-[10px] bg-blue-600 text-white px-2 py-0.2 rounded-full font-bold">
+                      {documents.supplementaryDocs?.length} Supplementary Doc(s) Attached
+                    </span>
+                  )}
+                </h4>
+                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                  💡 <strong>Prompt for Dealing Officer:</strong> Are there any additional reference documents to be uploaded for this case? Check if you need to attach Corrigendum / Addenda, Pre-Bid Clarification Minutes, Technical Scope &amp; Specifications, or Special GCC / SLA Conditions.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsAddingSuppDoc((prev) => !prev)}
+              className="px-3 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 self-start sm:self-auto"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{isAddingSuppDoc ? "Cancel Upload" : "+ Upload Additional Reference Document"}</span>
+            </button>
+          </div>
+
+          {/* Interactive Supplementary Upload Box */}
+          {isAddingSuppDoc && (
+            <div className="p-3.5 bg-white border border-blue-200 rounded-xl space-y-3 animate-in fade-in duration-150">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Select Reference Document Category *
+                  </label>
+                  <select
+                    value={suppCategory}
+                    onChange={(e) => setSuppCategory(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white text-slate-800 focus:outline-blue-500 font-medium"
+                  >
+                    <option value="Corrigendum">Corrigendum / Addendum to Tender</option>
+                    <option value="Pre-Bid Minutes">Pre-Bid Clarification Meeting Minutes</option>
+                    <option value="Technical Scope">Technical Scope &amp; Specifications / BOQ</option>
+                    <option value="Special Conditions">Special GCC / SCC / SLA Conditions</option>
+                    <option value="General Reference">General Statutory / Legal Reference</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Choose File from Local PC (.docx, .pdf, .xlsx, .txt) *
+                  </label>
+                  <input
+                    type="file"
+                    ref={suppFileInputRef}
+                    onChange={handleSupplementaryDocUpload}
+                    accept=".docx,.pdf,.xlsx,.xls,.txt"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => suppFileInputRef.current?.click()}
+                    className="w-full py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-medium rounded-lg border border-slate-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <UploadCloud className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Select File to Attach</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* List of Attached Supplementary Reference Documents */}
+          {documents.supplementaryDocs && documents.supplementaryDocs.length > 0 && (
+            <div className="pt-2 border-t border-blue-200/60 space-y-2">
+              <span className="text-[11px] font-semibold text-slate-600 block">
+                Attached Supplementary Reference Documents:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {documents.supplementaryDocs.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="p-2.5 bg-white border border-slate-200 rounded-lg flex items-center justify-between text-xs shadow-2xs"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <FileCheck2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className="truncate">
+                        <span className="font-semibold text-slate-800 truncate block" title={doc.name}>
+                          {doc.name}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                          <span className="px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded font-medium">
+                            {doc.category}
+                          </span>
+                          <span>•</span>
+                          <span>{formatChars(doc.charCount)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSupplementaryDoc(doc.id, doc.name)}
+                      className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50 cursor-pointer ml-2 shrink-0"
+                      title="Remove supplementary document"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

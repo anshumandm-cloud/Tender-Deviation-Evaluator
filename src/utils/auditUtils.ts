@@ -1,6 +1,6 @@
 import { AuditLogEntry, AuditCategory, TenderMetadata, BidderInput } from "../types";
 
-export const DEFAULT_DEALING_OFFICER = "Anshuman DM, Manager (Contracts & Procurement)";
+export const DEFAULT_DEALING_OFFICER = "Dealing Officer, Contracts & Procurement";
 
 export function formatAuditDateTime(date: Date): string {
   const d = date.toLocaleDateString("en-IN", {

@@ -138,19 +138,6 @@ export const Header: React.FC<HeaderProps> = ({
             <span>+ New Blank Case</span>
           </button>
 
-          <button
-            onClick={onLoadGenericCase}
-            className={`px-2.5 py-1.5 text-xs font-medium rounded-md border flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
-              metadata.tenderType === "EPC_TURNKEY" && metadata.packageTitle.includes("Turnkey")
-                ? "bg-cyan-950 text-cyan-200 border-cyan-500/60 font-semibold"
-                : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-            }`}
-            title="Load standard generic EPC Works template"
-          >
-            <Briefcase className="w-3.5 h-3.5 text-cyan-400" />
-            <span>EPC Works</span>
-          </button>
-
           {onLoadServicesCase && (
             <button
               onClick={onLoadServicesCase}
@@ -165,6 +152,19 @@ export const Header: React.FC<HeaderProps> = ({
               <span>Services (O&amp;M)</span>
             </button>
           )}
+
+          <button
+            onClick={onLoadGenericCase}
+            className={`px-2.5 py-1.5 text-xs font-medium rounded-md border flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${
+              metadata.tenderType === "EPC_TURNKEY"
+                ? "bg-cyan-950 text-cyan-200 border-cyan-500/60 font-semibold"
+                : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+            }`}
+            title="Load standard generic EPC Works template"
+          >
+            <Briefcase className="w-3.5 h-3.5 text-cyan-400" />
+            <span>EPC Works</span>
+          </button>
 
           <button
             onClick={onLoadSample}

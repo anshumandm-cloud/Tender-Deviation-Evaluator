@@ -49,6 +49,8 @@ interface ServiceEvaluationTabProps {
   setBidders: React.Dispatch<React.SetStateAction<BidderServiceSubmission[]>>;
   evaluationStage: "ROUND_1_INITIAL" | "SHORTFALL_ISSUED" | "ROUND_2_SHORTFALL_EVAL" | "FINAL_ACCEPTED";
   setEvaluationStage: React.Dispatch<React.SetStateAction<"ROUND_1_INITIAL" | "SHORTFALL_ISSUED" | "ROUND_2_SHORTFALL_EVAL" | "FINAL_ACCEPTED">>;
+  viewMode?: "consolidated" | "individual" | "letters" | "tampering" | "banning";
+  setViewMode?: (mode: "consolidated" | "individual" | "letters" | "tampering" | "banning") => void;
   onLogAudit?: (
     action: string,
     category: any,
@@ -69,10 +71,17 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
   setBidders,
   evaluationStage,
   setEvaluationStage,
+  viewMode: propViewMode,
+  setViewMode: propSetViewMode,
   onLogAudit,
 }) => {
   const [selectedBidderId, setSelectedBidderId] = useState<string>(bidders[0]?.bidderId || "");
-  const [viewMode, setViewMode] = useState<"consolidated" | "individual" | "letters" | "tampering" | "banning">("consolidated");
+  const [internalViewMode, setInternalViewMode] = useState<"consolidated" | "individual" | "letters" | "tampering" | "banning">("consolidated");
+  const viewMode = propViewMode !== undefined ? propViewMode : internalViewMode;
+  const setViewMode = (mode: "consolidated" | "individual" | "letters" | "tampering" | "banning") => {
+    setInternalViewMode(mode);
+    propSetViewMode?.(mode);
+  };
   const [letterTypeToView, setLetterTypeToView] = useState<"shortfall" | "rejection">("shortfall");
   const [isProcessingOcr, setIsProcessingOcr] = useState<boolean>(false);
   const [guidelinesModalOpen, setGuidelinesModalOpen] = useState<boolean>(false);
@@ -340,6 +349,37 @@ B. SUMMARY OF BIDDER SCRUTINY:
               </span>
             </button>
 
+            {evaluationStage === "ROUND_1_INITIAL" && (
+              <button
+                onClick={() => {
+                  setEvaluationStage("SHORTFALL_ISSUED");
+                  onLogAudit?.(
+                    "Advanced Stage to Shortfall Issued",
+                    "Evaluation",
+                    "Dealing officer issued shortfall/clarification letters to deficient bidders.",
+                    undefined,
+                    "Tender Stage",
+                    "OT Workflow"
+                  );
+                }}
+                className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                Mark Shortfall Letters Issued &rarr;
+              </button>
+            )}
+
+            {evaluationStage === "SHORTFALL_ISSUED" && (
+              <button
+                onClick={() => {
+                  setEvaluationStage("ROUND_2_SHORTFALL_EVAL");
+                  runReEvaluation(true);
+                }}
+                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                Start Round 2 (Shortfall Replies Scrutiny) &rarr;
+              </button>
+            )}
+
             {evaluationStage !== "FINAL_ACCEPTED" && (
               <button
                 onClick={() => setShowFinalPrompt(true)}
@@ -356,8 +396,12 @@ B. SUMMARY OF BIDDER SCRUTINY:
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5 pt-4 border-t border-slate-800/80">
           <button
             type="button"
-            onClick={() => setViewMode("banning")}
-            className="flex items-center gap-2.5 bg-slate-950/60 hover:bg-slate-900/90 px-3.5 py-2 rounded-xl border border-slate-800 text-left transition-colors cursor-pointer"
+            onClick={() => setViewMode(viewMode === "banning" ? "consolidated" : "banning")}
+            className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl border text-left transition-colors cursor-pointer ${
+              viewMode === "banning"
+                ? "bg-amber-950/80 border-amber-500"
+                : "bg-slate-950/60 hover:bg-slate-900/90 border-slate-800"
+            }`}
             title="Click to open Banning & Debarment Verification Console"
           >
             <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
@@ -371,17 +415,35 @@ B. SUMMARY OF BIDDER SCRUTINY:
             </div>
           </button>
 
-          <div className="flex items-center gap-2.5 bg-slate-950/60 px-3.5 py-2 rounded-xl border border-slate-800">
+          <button
+            type="button"
+            onClick={() => setViewMode(viewMode === "tampering" ? "consolidated" : "tampering")}
+            className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl border text-left transition-colors cursor-pointer ${
+              viewMode === "tampering"
+                ? "bg-cyan-950/80 border-cyan-500"
+                : "bg-slate-950/60 hover:bg-slate-900/90 border-slate-800"
+            }`}
+            title="Click to inspect Document Authenticity & Forgery Alerts"
+          >
             <Search className="w-4 h-4 text-cyan-400 shrink-0" />
             <div className="text-xs">
-              <span className="text-slate-400 block text-[10px]">Document Authenticity Check</span>
+              <span className="text-slate-400 block text-[10px]">Document Authenticity Check (Click to inspect)</span>
               <span className="font-semibold text-cyan-300">
                 {totalTamperingAlerts > 0 ? `${totalTamperingAlerts} Internal Alert(s) Noted` : "No Font/Artifact Anomalies"}
               </span>
             </div>
-          </div>
+          </button>
 
-          <div className="flex items-center gap-2.5 bg-slate-950/60 px-3.5 py-2 rounded-xl border border-slate-800">
+          <button
+            type="button"
+            onClick={() => setViewMode("letters")}
+            className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl border text-left transition-colors cursor-pointer ${
+              viewMode === "letters"
+                ? "bg-purple-950/80 border-purple-500"
+                : "bg-slate-950/60 hover:bg-slate-900/90 border-slate-800"
+            }`}
+            title="Click to view formal Shortfall and Rejection Notices"
+          >
             <Clock className="w-4 h-4 text-purple-400 shrink-0" />
             <div className="text-xs">
               <span className="text-slate-400 block text-[10px]">Shortfall / Rejection Notices</span>
@@ -390,118 +452,35 @@ B. SUMMARY OF BIDDER SCRUTINY:
                 {bidders.filter((b) => b.overallStatus === "REJECTED_DISQUALIFIED").length} Rejected
               </span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
-      {/* Navigation Sub-Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-xl text-xs font-semibold">
+      {/* Subview return indicator if inspecting Banning or Tampering */}
+      {(viewMode === "banning" || viewMode === "tampering") && (
+        <div className="flex items-center justify-between bg-slate-100 p-3 rounded-xl border border-slate-200 text-xs">
+          <span className="font-bold text-slate-800 flex items-center gap-1.5">
+            {viewMode === "banning" ? (
+              <>
+                <ShieldAlert className="w-4 h-4 text-amber-600" />
+                <span>Special Verification: Debarment &amp; Banning Register Screening</span>
+              </>
+            ) : (
+              <>
+                <AlertOctagon className="w-4 h-4 text-cyan-600" />
+                <span>Special Verification: Document Authenticity &amp; Integrity Analysis</span>
+              </>
+            )}
+          </span>
           <button
+            type="button"
             onClick={() => setViewMode("consolidated")}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-              viewMode === "consolidated"
-                ? "bg-white text-blue-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
+            className="px-3 py-1 bg-white hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 font-semibold cursor-pointer shadow-2xs"
           >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Consolidated Comparative Statement</span>
-          </button>
-
-          <button
-            onClick={() => setViewMode("individual")}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-              viewMode === "individual"
-                ? "bg-white text-blue-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Individual Bidder Dossier</span>
-          </button>
-
-          <button
-            onClick={() => setViewMode("letters")}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-              viewMode === "letters"
-                ? "bg-white text-blue-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <FileCheck2 className="w-3.5 h-3.5" />
-            <span>Formal Letters (Shortfall / Rejection)</span>
-          </button>
-
-          <button
-            onClick={() => setViewMode("tampering")}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-              viewMode === "tampering"
-                ? "bg-white text-rose-700 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <AlertOctagon className="w-3.5 h-3.5 text-rose-600" />
-            <span>Forgery Alerts ({totalTamperingAlerts})</span>
-          </button>
-
-          <button
-            onClick={() => setViewMode("banning")}
-            className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
-              viewMode === "banning"
-                ? "bg-white text-amber-800 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
-            <span>
-              Banning &amp; Debarment Check (
-              {bidders.filter((b) => b.banningStatusAlert.isAlertTriggered).length > 0 ? (
-                <span className="text-rose-600 font-bold">
-                  {bidders.filter((b) => b.banningStatusAlert.isAlertTriggered).length} Alert
-                </span>
-              ) : (
-                <span className="text-emerald-600 font-medium">Clean</span>
-              )}
-              )
-            </span>
+            &larr; Return to Comparative Statement
           </button>
         </div>
-
-        {/* Evaluation Stage Badge */}
-        <div className="flex items-center gap-2">
-          {evaluationStage === "ROUND_1_INITIAL" && (
-            <button
-              onClick={() => {
-                setEvaluationStage("SHORTFALL_ISSUED");
-                onLogAudit?.(
-                  "Advanced Stage to Shortfall Issued",
-                  "Evaluation",
-                  "Dealing officer issued shortfall/clarification letters to deficient bidders.",
-                  undefined,
-                  "Tender Stage",
-                  "OT Workflow"
-                );
-              }}
-              className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-md text-xs font-medium hover:bg-purple-100 transition-colors cursor-pointer"
-            >
-              Mark Shortfall Letters Issued &rarr;
-            </button>
-          )}
-
-          {evaluationStage === "SHORTFALL_ISSUED" && (
-            <button
-              onClick={() => {
-                setEvaluationStage("ROUND_2_SHORTFALL_EVAL");
-                runReEvaluation(true);
-              }}
-              className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md text-xs font-semibold hover:bg-indigo-100 transition-colors cursor-pointer"
-            >
-              Start Round 2 (Shortfall Replies Scrutiny) &rarr;
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* VIEW 1: CONSOLIDATED COMPARATIVE STATEMENT */}
       {viewMode === "consolidated" && (

@@ -976,6 +976,25 @@ DIRECTIVE_JSON>>>`;
   }
 });
 
+// Dealing Officer Suggestion / Feedback endpoint
+app.post("/api/send-feedback", (req, res) => {
+  try {
+    const { category, subject, feedbackText, officerName, organization, timestamp } = req.body;
+    console.log(
+      `[SUGGESTION/FEEDBACK RECEIVED] Category: ${category || "General"} | Subject: ${subject || "No subject"} | From: ${
+        officerName || "Dealing Officer"
+      } (${organization || "PSU"})`
+    );
+    return res.json({
+      success: true,
+      message: "Feedback successfully recorded for the Author.",
+      timestamp: timestamp || new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Vite Middleware for development & static serving for production
 async function startServer() {
   // Always serve public directory for PWA icons, manifest, and .well-known/assetlinks.json

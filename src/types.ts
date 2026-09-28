@@ -16,6 +16,16 @@ export interface TenderMetadata {
   tenderType?: TenderProcurementType;
 }
 
+export interface SupplementaryReferenceDocument {
+  id: string;
+  name: string;
+  fileType: string;
+  charCount: number;
+  uploadedAt: string;
+  category: "Corrigendum" | "Pre-Bid Minutes" | "Technical Scope" | "Special Conditions" | "General Reference";
+  extractedText?: string;
+}
+
 export interface TenderDocuments {
   sbdName: string;
   sbdText: string;
@@ -25,6 +35,7 @@ export interface TenderDocuments {
   nitText: string;
   nitCharCount: number;
   nitSource: "pc" | "drive" | "sample" | "manual";
+  supplementaryDocs?: SupplementaryReferenceDocument[];
 }
 
 export interface BidderInput {
@@ -185,7 +196,7 @@ export interface AuditLogEntry {
   id: string;
   timestamp: string; // ISO 8601 string
   formattedTime: string; // e.g. "22 Sep 2026, 14:45:12"
-  officer: string; // Name & designation of the dealing officer e.g. "Anshuman DM, Manager (Contracts)"
+  officer: string; // Name & designation of the dealing officer e.g. "Dealing Officer, Contracts & Procurement"
   category: AuditCategory;
   action: string; // e.g. "Updated Estimated Value", "Uploaded SBD", "Added Bidder"
   summary: string; // Clear summary of the modification
