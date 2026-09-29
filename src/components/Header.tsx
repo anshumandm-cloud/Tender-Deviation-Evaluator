@@ -57,7 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
           <span className="text-slate-500">|</span>
           <span className="text-cyan-300 font-mono">
-            {metadata.tenderType === "SERVICES_O_AND_M" ? "SERVICE & O&M CONTRACT EVALUATOR" : "EPC / TURNKEY CONTRACT EVALUATOR"}
+            {metadata.tenderType === "SERVICES_O_AND_M" ? "SERVICE & O&M CONTRACT EVALUATOR" : "EPC / TURNKEY CONTRACT DEVIATIONS EVALUATOR"}
           </span>
           <span className="text-slate-500">|</span>
           <span className="text-slate-400 text-[11px]">Author: <strong className="text-blue-400 font-bold">ADM</strong></span>
@@ -104,7 +104,7 @@ export const Header: React.FC<HeaderProps> = ({
                 Tender Evaluation Tool
               </h1>
               <span className="bg-blue-900/70 border border-blue-400/30 text-blue-200 text-[11px] px-2 py-0.5 rounded-full font-medium">
-                EPC-Works &amp; Services
+                {metadata.tenderType === "SERVICES_O_AND_M" ? "Services (O&M)" : "EPC-Works Deviations"}
               </span>
             </div>
             <p className="text-xs text-slate-400 truncate max-w-xl">

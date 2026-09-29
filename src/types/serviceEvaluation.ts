@@ -32,6 +32,8 @@ export interface BidderSubmittedDocument {
   uploadedAt: string;
   isOcrScanned?: boolean;
   ocrConfidence?: number; // 0 - 100%
+  sourceArchive?: string;
+  pageCount?: number;
   // Integrity / Tampering Flags (For Dealing Officer's attention only)
   tamperingAlerts?: DocumentTamperingAlert[];
 }
@@ -76,7 +78,14 @@ export interface BidderServiceSubmission {
   // Documents
   turnoverDocuments: BidderSubmittedDocument[];
   experienceDocuments: BidderSubmittedDocument[];
+  statutoryDocuments?: BidderSubmittedDocument[];
   shortfallReplyDocuments?: BidderSubmittedDocument[]; // For Round 2 / Shortfall evaluation
+  uploadedBundles?: {
+    bundleName: string;
+    fileType: "zip" | "pdf";
+    totalFilesExtracted: number;
+    uploadedAt: string;
+  }[];
 
   // Financial Criteria Evaluation Result
   financialEvaluation: {

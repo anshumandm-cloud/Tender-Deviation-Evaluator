@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import dotenv from "dotenv";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
 dotenv.config();
@@ -1000,14 +1000,28 @@ async function startServer() {
   // Always serve public directory for PWA icons, manifest, and .well-known/assetlinks.json
   app.use(express.static(path.join(process.cwd(), "public")));
 
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+  const isDev = process.env.NODE_ENV === "development";
+  const distPath = path.join(process.cwd(), "dist");
+
+  if (isDev) {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (viteErr) {
+      console.warn("Could not start Vite dev middleware, falling back to static dist files:", viteErr);
+      if (fs.existsSync(distPath)) {
+        app.use(express.static(distPath));
+        app.get("*", (_req, res) => {
+          res.sendFile(path.join(distPath, "index.html"));
+        });
+      }
+    }
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    // Production mode (Cloud Run / npm start): serve pre-compiled bundle from dist
     app.use(express.static(distPath));
     app.get("*", (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
@@ -1015,8 +1029,11 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Dealing Officer Evaluation Server running on port ${PORT}`);
+    console.log(`Dealing Officer Evaluation Server running on port ${PORT} [NODE_ENV=${process.env.NODE_ENV || "production"}]`);
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("Critical error starting server:", err);
+  process.exit(1);
+});

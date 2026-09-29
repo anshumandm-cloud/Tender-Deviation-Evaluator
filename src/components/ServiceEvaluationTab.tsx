@@ -24,6 +24,11 @@ import {
   Plus,
   Trash2,
   ShieldCheck,
+  FolderArchive,
+  FileSpreadsheet,
+  Copy,
+  Check,
+  FileCode,
 } from "lucide-react";
 import {
   ServiceCriteriaRequirement,
@@ -33,11 +38,17 @@ import {
   DocumentTamperingAlert,
   BlacklistedEntity,
 } from "../types/serviceEvaluation";
-import { TenderMetadata } from "../types";
+import { TenderMetadata, UploadedFormatTemplate } from "../types";
 import { parseUploadedFile } from "../utils/fileParser";
 import { evaluateBidderEligibility } from "../utils/serviceEvaluationEngine";
-import { triggerFileDownload } from "../utils/exportUtils";
+import {
+  triggerFileDownload,
+  exportServiceEvaluationToExcel,
+  exportServiceEvaluationToDocx,
+  generateServiceEvaluationCustomText,
+} from "../utils/exportUtils";
 import { DEFAULT_BLACKLISTED_ENTITIES, checkBidderBanningStatus } from "../utils/banningDatabase";
+import { PRESET_FORMAT_TEMPLATES } from "../utils/formatTemplates";
 
 interface ServiceEvaluationTabProps {
   metadata: TenderMetadata;
@@ -86,6 +97,23 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
   const [isProcessingOcr, setIsProcessingOcr] = useState<boolean>(false);
   const [guidelinesModalOpen, setGuidelinesModalOpen] = useState<boolean>(false);
   const [showFinalPrompt, setShowFinalPrompt] = useState<boolean>(false);
+
+  // Dossier upload modal state (Single ZIP / Consolidated PDF / Multi-docs)
+  const [isDossierModalOpen, setIsDossierModalOpen] = useState<boolean>(false);
+  const [dossierTargetBidderId, setDossierTargetBidderId] = useState<string>(bidders[0]?.bidderId || "");
+  const [isAddingNewBidder, setIsAddingNewBidder] = useState<boolean>(false);
+  const [newBidderNameInput, setNewBidderNameInput] = useState<string>("");
+
+  // Output format modal & custom template state
+  const [isExportFormatModalOpen, setIsExportFormatModalOpen] = useState<boolean>(false);
+  const [selectedFormatTemplateId, setSelectedFormatTemplateId] = useState<string>("standard-excel");
+  const [userUploadedTemplate, setUserUploadedTemplate] = useState<UploadedFormatTemplate | null>(null);
+  const [customFormatTextPreview, setCustomFormatTextPreview] = useState<string>("");
+  const [hasCopiedFormat, setHasCopiedFormat] = useState<boolean>(false);
+
+  // Inspected document preview modal
+  const [previewDocModal, setPreviewDocModal] = useState<BidderSubmittedDocument | null>(null);
+  const [uploadFeedback, setUploadFeedback] = useState<{ message: string; type: "success" | "info" } | null>(null);
 
   // Hypothetical internal & external banning database
   const [blacklistDatabase, setBlacklistDatabase] = useState<BlacklistedEntity[]>(DEFAULT_BLACKLISTED_ENTITIES);
@@ -197,33 +225,79 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
     );
   };
 
-  // Upload new document for a bidder
+  // Upload document or complete dossier (Single ZIP, Single PDF, or multiple files)
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     bidderId: string,
-    category: "turnover" | "experience" | "shortfall_reply"
+    category: "bundle" | "turnover" | "experience" | "statutory" | "shortfall_reply" = "bundle"
   ) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setIsProcessingOcr(true);
-    const newDocs: BidderSubmittedDocument[] = [];
+    let totalFilesExtracted = 0;
+    const turnoverToAdd: BidderSubmittedDocument[] = [];
+    const experienceToAdd: BidderSubmittedDocument[] = [];
+    const statutoryToAdd: BidderSubmittedDocument[] = [];
+    const shortfallToAdd: BidderSubmittedDocument[] = [];
+    const newBundles: { bundleName: string; fileType: "zip" | "pdf"; totalFilesExtracted: number; uploadedAt: string }[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
         const parsed = await parseUploadedFile(file);
-        newDocs.push({
-          id: `doc-${Date.now()}-${i}`,
-          name: file.name,
-          category,
-          fileType: parsed.fileType,
-          extractedText: parsed.text,
-          charCount: parsed.charCount,
-          uploadedAt: new Date().toISOString().split("T")[0],
-          isOcrScanned: parsed.isOcrScanned,
-          ocrConfidence: parsed.isOcrScanned ? 90 : undefined,
-        });
+
+        if (parsed.subDocuments && parsed.subDocuments.length > 0) {
+          // A ZIP file or a consolidated multi-document PDF
+          newBundles.push({
+            bundleName: file.name,
+            fileType: (file.name.toLowerCase().endsWith(".zip") ? "zip" : "pdf") as "zip" | "pdf",
+            totalFilesExtracted: parsed.subDocuments.length,
+            uploadedAt: new Date().toISOString().split("T")[0],
+          });
+
+          parsed.subDocuments.forEach((subDoc, sIdx) => {
+            totalFilesExtracted++;
+            const docObj: BidderSubmittedDocument = {
+              id: `doc-${Date.now()}-${i}-${sIdx}`,
+              name: subDoc.name,
+              category: category === "bundle" ? subDoc.category : (category as any),
+              fileType: subDoc.fileType,
+              extractedText: subDoc.extractedText,
+              charCount: subDoc.charCount,
+              uploadedAt: new Date().toISOString().split("T")[0],
+              isOcrScanned: subDoc.isOcrScanned,
+              ocrConfidence: subDoc.ocrConfidence,
+              sourceArchive: file.name,
+              pageCount: subDoc.pageCount,
+            };
+
+            const effCat = category === "bundle" ? subDoc.category : category;
+            if (effCat === "turnover") turnoverToAdd.push(docObj);
+            else if (effCat === "experience") experienceToAdd.push(docObj);
+            else if (effCat === "statutory") statutoryToAdd.push(docObj);
+            else shortfallToAdd.push(docObj);
+          });
+        } else {
+          // Standard single file (PDF, DOCX, XLSX, TXT, image)
+          totalFilesExtracted++;
+          const effCat = category === "bundle" ? (parsed.isOcrScanned ? "experience" : "turnover") : category;
+          const docObj: BidderSubmittedDocument = {
+            id: `doc-${Date.now()}-${i}`,
+            name: file.name,
+            category: effCat as any,
+            fileType: parsed.fileType,
+            extractedText: parsed.text,
+            charCount: parsed.charCount,
+            uploadedAt: new Date().toISOString().split("T")[0],
+            isOcrScanned: parsed.isOcrScanned,
+            ocrConfidence: parsed.isOcrScanned ? 90 : undefined,
+          };
+          if (effCat === "turnover") turnoverToAdd.push(docObj);
+          else if (effCat === "experience") experienceToAdd.push(docObj);
+          else if (effCat === "statutory") statutoryToAdd.push(docObj);
+          else shortfallToAdd.push(docObj);
+        }
       } catch (err) {
         console.error("File upload error:", err);
       }
@@ -232,14 +306,14 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
     setBidders((prev) =>
       prev.map((b) => {
         if (b.bidderId !== bidderId) return b;
-        const updated = { ...b };
-        if (category === "turnover") {
-          updated.turnoverDocuments = [...updated.turnoverDocuments, ...newDocs];
-        } else if (category === "experience") {
-          updated.experienceDocuments = [...updated.experienceDocuments, ...newDocs];
-        } else {
-          updated.shortfallReplyDocuments = [...(updated.shortfallReplyDocuments || []), ...newDocs];
-        }
+        const updated = {
+          ...b,
+          turnoverDocuments: [...b.turnoverDocuments, ...turnoverToAdd],
+          experienceDocuments: [...b.experienceDocuments, ...experienceToAdd],
+          statutoryDocuments: [...(b.statutoryDocuments || []), ...statutoryToAdd],
+          shortfallReplyDocuments: [...(b.shortfallReplyDocuments || []), ...shortfallToAdd],
+          uploadedBundles: [...(b.uploadedBundles || []), ...newBundles],
+        };
         return evaluateBidderEligibility(
           updated,
           criteria,
@@ -252,14 +326,102 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
     );
 
     setIsProcessingOcr(false);
+    const targetBidder = bidders.find((b) => b.bidderId === bidderId);
+    setUploadFeedback({
+      type: "success",
+      message: `Extracted ${totalFilesExtracted} document(s) for ${targetBidder?.bidderName || "bidder"}. Eligibility re-calculated automatically.`,
+    });
+    setTimeout(() => setUploadFeedback(null), 6000);
+
     onLogAudit?.(
-      "Uploaded Eligibility Document",
+      "Uploaded Eligibility Document Dossier",
       "Bidders & Deviations",
-      `Uploaded ${newDocs.length} ${category} document(s) for bidder: ${activeBidder.bidderName}`,
+      `Extracted ${totalFilesExtracted} document(s) from upload bundle for bidder: ${targetBidder?.bidderName || bidderId}`,
       undefined,
-      `Bidder: ${activeBidder.bidderName}`,
+      `Bidder: ${targetBidder?.bidderName || bidderId}`,
       "Document Scrutiny"
     );
+  };
+
+  // Add a new bidder and upload dossier immediately
+  const handleAddNewBidderWithDossier = (bidderName: string) => {
+    const newId = `bidder-${Date.now()}`;
+    const newBidder: BidderServiceSubmission = {
+      bidderId: newId,
+      bidderName: bidderName.trim() || `New Bidder ${bidders.length + 1}`,
+      round: 1,
+      overallStatus: "SHORTFALL_REQUIRED",
+      summaryReason: "Dossier uploaded; preliminary technical evaluation active.",
+      banningStatusAlert: {
+        isAlertTriggered: false,
+        banningCheckListClauseRef: "NIT Clause 14 & CVC Debarment Register",
+        verifiedStatus: "CLEAN",
+      },
+      turnoverDocuments: [],
+      experienceDocuments: [],
+      statutoryDocuments: [],
+      uploadedBundles: [],
+      financialEvaluation: {
+        claimedTurnoverByYear: [],
+        averageTurnoverCr: 0,
+        requiredTurnoverCr: criteria.minAverageAnnualTurnoverCr,
+        status: "SHORTFALL",
+        reasons: ["No turnover certificate provided"],
+        relevantDocumentsCited: [],
+      },
+      experienceEvaluation: {
+        submittedWorks: [],
+        status: "SHORTFALL",
+        reasons: ["No experience certificate provided"],
+        relevantDocumentsCited: [],
+      },
+    };
+    setBidders((prev) => [...prev, newBidder]);
+    setSelectedBidderId(newId);
+    setDossierTargetBidderId(newId);
+    setIsAddingNewBidder(false);
+    setNewBidderNameInput("");
+    return newId;
+  };
+
+  // Upload custom format template
+  const handleUploadFormatTemplate = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const parsed = await parseUploadedFile(file);
+      const newTemplate: UploadedFormatTemplate = {
+        id: `custom-fmt-${Date.now()}`,
+        name: file.name,
+        fileType: parsed.fileType,
+        charCount: parsed.charCount,
+        uploadedAt: new Date().toLocaleDateString("en-IN"),
+        isActive: true,
+        templateText: parsed.text,
+        description: `Custom format template uploaded by Dealing Officer (${parsed.charCount} characters).`,
+        parsedSections: [
+          "1. Department Header & NIT Reference",
+          "2. NIT Eligibility Criteria Thresholds",
+          "3. Techno-Commercial Comparative Statement",
+          "4. Scrutiny Findings & Committee Sign-off",
+        ],
+      };
+      setUserUploadedTemplate(newTemplate);
+      setSelectedFormatTemplateId(newTemplate.id);
+      const populated = generateServiceEvaluationCustomText(bidders, criteria, metadata, parsed.text);
+      setCustomFormatTextPreview(populated);
+      onLogAudit?.(
+        "Uploaded Custom Evaluation Format",
+        "Evaluation",
+        `Dealing officer uploaded custom template: '${file.name}'`,
+        undefined,
+        "Custom Template",
+        "Reporting Format"
+      );
+    } catch (err) {
+      console.error("Format upload error:", err);
+    }
   };
 
   // Export Consolidated Comparative Statement
@@ -332,6 +494,37 @@ B. SUMMARY OF BIDDER SCRUTINY:
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
+              onClick={() => {
+                setDossierTargetBidderId(activeBidder?.bidderId || bidders[0]?.bidderId || "");
+                setIsAddingNewBidder(false);
+                setIsDossierModalOpen(true);
+              }}
+              className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Upload complete eligibility document package as single ZIP or PDF"
+            >
+              <FolderArchive className="w-3.5 h-3.5" />
+              <span>Upload Bidder Dossier (ZIP / PDF)</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const defaultText = generateServiceEvaluationCustomText(
+                  bidders,
+                  criteria,
+                  metadata,
+                  userUploadedTemplate?.templateText
+                );
+                setCustomFormatTextPreview(defaultText);
+                setIsExportFormatModalOpen(true);
+              }}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Produce evaluation output as Excel, Word, or as desired per your uploaded format"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Output Formats &amp; Desired Templates</span>
+            </button>
+
+            <button
               onClick={() => setGuidelinesModalOpen(true)}
               className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-600 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
             >
@@ -391,6 +584,22 @@ B. SUMMARY OF BIDDER SCRUTINY:
             )}
           </div>
         </div>
+
+        {/* Upload feedback banner */}
+        {uploadFeedback && (
+          <div className="mt-4 bg-emerald-950/90 border border-emerald-500 text-emerald-100 rounded-xl p-3 flex items-center justify-between text-xs animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="font-medium">{uploadFeedback.message}</span>
+            </div>
+            <button
+              onClick={() => setUploadFeedback(null)}
+              className="text-emerald-300 hover:text-white font-bold ml-3 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Global Alerts: Banning & Tampering summary */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5 pt-4 border-t border-slate-800/80">
@@ -497,9 +706,35 @@ B. SUMMARY OF BIDDER SCRUTINY:
                 Evaluation conducted as per Qualifying Requirements in NIT and Open Tender Shortfall Circulars.
               </p>
             </div>
-            <span className="text-xs font-mono bg-slate-100 px-2 py-1 rounded text-slate-700">
-              Total Bidders: {bidders.length}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-mono bg-slate-100 px-2.5 py-1 rounded text-slate-700">
+                Total Bidders: {bidders.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setDossierTargetBidderId(bidders[0]?.bidderId || "");
+                  setIsAddingNewBidder(false);
+                  setIsDossierModalOpen(true);
+                }}
+                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer shadow-2xs"
+                title="Upload complete eligibility document package as single ZIP or PDF"
+              >
+                <FolderArchive className="w-3.5 h-3.5 text-amber-600" />
+                <span>Upload Dossier (ZIP / Single PDF)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddingNewBidder(true);
+                  setIsDossierModalOpen(true);
+                }}
+                className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5 text-blue-600" />
+                <span>Add Bidder</span>
+              </button>
+            </div>
           </div>
 
           {/* Comparative Matrix Table */}
@@ -522,9 +757,21 @@ B. SUMMARY OF BIDDER SCRUTINY:
                     <td className="p-3 font-mono text-slate-500">{idx + 1}</td>
                     <td className="p-3 font-bold text-slate-900">
                       <div>{b.bidderName}</div>
-                      <span className="text-[10px] font-normal text-slate-400">
-                        {b.turnoverDocuments.length} Turnover Docs • {b.experienceDocuments.length} Exp Docs
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                        <span className="text-[10px] font-normal text-slate-500">
+                          {b.turnoverDocuments.length} Fin • {b.experienceDocuments.length} Exp
+                          {b.statutoryDocuments && b.statutoryDocuments.length > 0 && ` • ${b.statutoryDocuments.length} Stat`}
+                        </span>
+                        {b.uploadedBundles && b.uploadedBundles.length > 0 && (
+                          <span
+                            className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-mono border border-amber-200 flex items-center gap-0.5"
+                            title={`Archive: ${b.uploadedBundles[0].bundleName}`}
+                          >
+                            <FolderArchive className="w-2.5 h-2.5 text-amber-600" />
+                            <span className="truncate max-w-[110px]">{b.uploadedBundles[0].bundleName}</span>
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-1.5 mb-1">
@@ -639,8 +886,35 @@ B. SUMMARY OF BIDDER SCRUTINY:
                         </button>
                       )}
                       {b.overallStatus === "RESPONSIVE_QUALIFIED" && (
-                        <span className="text-emerald-600 text-xs font-medium">Ready for Price Bid</span>
+                        <span className="text-emerald-600 text-xs font-medium block">Ready for Price Bid</span>
                       )}
+                      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBidderId(b.bidderId);
+                            setDossierTargetBidderId(b.bidderId);
+                            setIsAddingNewBidder(false);
+                            setIsDossierModalOpen(true);
+                          }}
+                          className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                          title="Upload complete ZIP / PDF dossier for this bidder"
+                        >
+                          <Upload className="w-3 h-3 text-slate-500" />
+                          <span>Upload (ZIP/PDF)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedBidderId(b.bidderId);
+                            setViewMode("individual");
+                          }}
+                          className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                        >
+                          <Eye className="w-3 h-3 text-blue-600" />
+                          <span>Dossier</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -678,6 +952,136 @@ B. SUMMARY OF BIDDER SCRUTINY:
               </button>
             ))}
           </div>
+
+          {/* Complete Bidder Document Dossier Banner (Single ZIP / Consolidated PDF / Multi-docs) */}
+          {(() => {
+            const allSubmittedDocs = [
+              ...activeBidder.turnoverDocuments,
+              ...activeBidder.experienceDocuments,
+              ...(activeBidder.statutoryDocuments || []),
+              ...(activeBidder.shortfallReplyDocuments || []),
+            ];
+
+            return (
+              <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white rounded-xl p-5 border border-blue-600/40 shadow-sm space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <FolderArchive className="w-5 h-5 text-amber-400" />
+                      <h4 className="font-bold text-white text-sm">
+                        Complete Bidder Document Dossier (Single ZIP file or Consolidated Multi-page PDF)
+                      </h4>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/30 text-blue-200 border border-blue-400/30 font-semibold">
+                        Automatic Categorization &amp; Information Extraction
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 max-w-3xl">
+                      Bidders in Services (O&amp;M) may submit their entire qualification submission as a <strong>single .zip archive</strong> or a <strong>single consolidated .pdf file</strong> (or multiple individual files). The system unpacks all files, automatically identifies Financial Turnover, Technical Experience &amp; Statutory registrations, extracts audited figures and CA UDINs, checks work order thresholds, and updates eligibility live.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <label className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-sm flex items-center gap-2 transition-all cursor-pointer">
+                      <Upload className="w-4 h-4" />
+                      <span>Upload ZIP / Single PDF / Files</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept=".zip,.pdf,.docx,.xlsx,.csv,image/*,.txt"
+                        onChange={(e) => handleFileUpload(e, activeBidder.bidderId, "bundle")}
+                        className="hidden"
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const defaultText = generateServiceEvaluationCustomText(
+                          [activeBidder],
+                          criteria,
+                          metadata,
+                          userUploadedTemplate?.templateText
+                        );
+                        setCustomFormatTextPreview(defaultText);
+                        setIsExportFormatModalOpen(true);
+                      }}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Export in Custom Format</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Uploaded Archive Bundles list */}
+                {activeBidder.uploadedBundles && activeBidder.uploadedBundles.length > 0 && (
+                  <div className="bg-slate-950/70 rounded-lg p-3 border border-slate-800 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-slate-400 font-semibold flex items-center gap-1">
+                      <FolderArchive className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Uploaded Archive Package(s):</span>
+                    </span>
+                    {activeBidder.uploadedBundles.map((bun, bIdx) => (
+                      <span
+                        key={bIdx}
+                        className="px-2.5 py-1 rounded-md bg-blue-950/80 text-blue-200 font-mono text-[11px] flex items-center gap-1.5 border border-blue-800/60"
+                      >
+                        <span className="font-bold">{bun.bundleName}</span>
+                        <span className="text-blue-400">({bun.totalFilesExtracted} documents extracted)</span>
+                        <span className="text-[10px] text-slate-400">[{bun.uploadedAt}]</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Extracted Document Badges */}
+                {allSubmittedDocs.length > 0 ? (
+                  <div className="pt-1">
+                    <div className="text-[11px] text-slate-400 mb-1.5 flex items-center justify-between">
+                      <span className="font-semibold text-slate-300">
+                        Extracted Documents ({allSubmittedDocs.length} total across Turnover, Experience &amp; Statutory):
+                      </span>
+                      <span className="text-[10px] text-slate-400">Click any document to inspect extracted content</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
+                      {allSubmittedDocs.map((doc) => (
+                        <button
+                          key={doc.id}
+                          type="button"
+                          onClick={() => setPreviewDocModal(doc)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700 text-[11px] text-slate-200 flex items-center gap-2 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              doc.category === "turnover"
+                                ? "bg-blue-400"
+                                : doc.category === "experience"
+                                ? "bg-emerald-400"
+                                : doc.category === "statutory"
+                                ? "bg-purple-400"
+                                : "bg-amber-400"
+                            }`}
+                          />
+                          <span className="font-medium truncate max-w-[180px]">{doc.name}</span>
+                          <span className="text-[10px] text-slate-400 uppercase font-mono">
+                            [{doc.category}]
+                          </span>
+                          {doc.sourceArchive && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-900 text-amber-300 font-mono">
+                              from {doc.sourceArchive.length > 15 ? doc.sourceArchive.slice(0, 15) + "…" : doc.sourceArchive}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-slate-950/40 rounded-lg border border-dashed border-slate-700 text-center text-xs text-slate-400">
+                    No documents uploaded yet for this bidder. Upload a single .zip or .pdf file above to extract all eligibility data.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Active Bidder Details */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1593,6 +1997,469 @@ B. SUMMARY OF BIDDER SCRUTINY:
                 className="flex-1 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg cursor-pointer"
               >
                 Confirm &amp; Lock Case
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 1: Upload Complete Bidder Dossier (Single ZIP / Consolidated PDF / Multi-docs) */}
+      {isDossierModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center">
+                  <FolderArchive className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">
+                    Upload Complete Bidder Dossier
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Single ZIP file, consolidated PDF, or multiple files submitted by bidder
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsDossierModalOpen(false);
+                  setIsAddingNewBidder(false);
+                }}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Target Bidder Selection */}
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-700">
+                Target Bidder:
+              </label>
+              <div className="flex items-center gap-3 text-xs">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={!isAddingNewBidder}
+                    onChange={() => setIsAddingNewBidder(false)}
+                    className="accent-blue-600"
+                  />
+                  <span>Select Existing Bidder</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    checked={isAddingNewBidder}
+                    onChange={() => setIsAddingNewBidder(true)}
+                    className="accent-blue-600"
+                  />
+                  <span>Create New Bidder</span>
+                </label>
+              </div>
+
+              {!isAddingNewBidder ? (
+                <select
+                  value={dossierTargetBidderId}
+                  onChange={(e) => setDossierTargetBidderId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 focus:outline-blue-500"
+                >
+                  {bidders.map((b) => (
+                    <option key={b.bidderId} value={b.bidderId}>
+                      {b.bidderName} ({b.overallStatus})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Enter Bidder Legal Entity Name (e.g. M/s Pioneer Electro-Mechanical Services)"
+                  value={newBidderNameInput}
+                  onChange={(e) => setNewBidderNameInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 focus:outline-blue-500"
+                />
+              )}
+            </div>
+
+            {/* File Upload Drop Zone */}
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-700">
+                Select Dossier Package (ZIP / Single Consolidated PDF / Multiple Documents):
+              </label>
+              <div className="border-2 border-dashed border-amber-300 bg-amber-50/50 hover:bg-amber-50 rounded-xl p-6 text-center transition-colors">
+                <FolderArchive className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                <p className="text-xs font-semibold text-slate-800">
+                  Click or drag files here to upload complete bidder dossier
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
+                  Supports <strong>.zip</strong> archive containing multiple files, single multi-page <strong>.pdf</strong>, <strong>.docx</strong>, <strong>.xlsx</strong>, or scanned images.
+                </p>
+                <input
+                  type="file"
+                  multiple
+                  accept=".zip,.pdf,.docx,.xlsx,.csv,image/*,.txt"
+                  id="dossier-modal-file-input"
+                  onChange={async (e) => {
+                    let targetId = dossierTargetBidderId;
+                    if (isAddingNewBidder) {
+                      if (!newBidderNameInput.trim()) {
+                        alert("Please enter a bidder name first.");
+                        return;
+                      }
+                      targetId = handleAddNewBidderWithDossier(newBidderNameInput);
+                    }
+                    await handleFileUpload(e, targetId, "bundle");
+                    setIsDossierModalOpen(false);
+                  }}
+                  className="mt-4 block w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-600 file:text-white hover:file:bg-amber-500 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* System Capabilities Checklist */}
+            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-[11px] space-y-1.5 text-slate-600">
+              <div className="font-bold text-slate-800 text-xs">Automated Extraction Capabilities:</div>
+              <div className="flex items-center gap-1.5 text-emerald-700">
+                <Check className="w-3.5 h-3.5 shrink-0" />
+                <span>Unpacks ZIP archives and parses every embedded PDF, DOCX, XLSX, and image</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-emerald-700">
+                <Check className="w-3.5 h-3.5 shrink-0" />
+                <span>Separates multi-page consolidated PDFs into certificate heads &amp; sections</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-emerald-700">
+                <Check className="w-3.5 h-3.5 shrink-0" />
+                <span>Extracts 3-year turnover numbers &amp; validates 18-digit CA UDIN presence</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-emerald-700">
+                <Check className="w-3.5 h-3.5 shrink-0" />
+                <span>Calculates qualifying Single/Two/Three work orders against NIT criteria</span>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDossierModalOpen(false);
+                  setIsAddingNewBidder(false);
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: Output Formats & Custom Template Generator */}
+      {isExportFormatModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center">
+                  <FileSpreadsheet className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">
+                    Evaluation Output &amp; Format Template Generator
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Export in standard formats or produce output as desired per your uploaded format
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsExportFormatModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="overflow-y-auto space-y-4 pr-1 flex-1">
+              {/* Option Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {/* Standard Excel */}
+                <div
+                  onClick={() => {
+                    setSelectedFormatTemplateId("standard-excel");
+                    setCustomFormatTextPreview(
+                      generateServiceEvaluationCustomText(bidders, criteria, metadata)
+                    );
+                  }}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    selectedFormatTemplateId === "standard-excel"
+                      ? "border-emerald-500 bg-emerald-50/50 shadow-xs"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      <span>Standard Excel (.xlsx)</span>
+                    </span>
+                    {selectedFormatTemplateId === "standard-excel" && (
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Full 3-sheet comparative statement, financial turnovers, UDINs, submitted past works, and shortfall schedule.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      exportServiceEvaluationToExcel(bidders, criteria, metadata);
+                    }}
+                    className="mt-2.5 w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Download Excel</span>
+                  </button>
+                </div>
+
+                {/* Standard Word */}
+                <div
+                  onClick={() => {
+                    setSelectedFormatTemplateId("standard-docx");
+                    setCustomFormatTextPreview(
+                      generateServiceEvaluationCustomText(bidders, criteria, metadata)
+                    );
+                  }}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    selectedFormatTemplateId === "standard-docx"
+                      ? "border-blue-500 bg-blue-50/50 shadow-xs"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-blue-600" />
+                      <span>Formal Note (Word .docx)</span>
+                    </span>
+                    {selectedFormatTemplateId === "standard-docx" && (
+                      <CheckCircle className="w-4 h-4 text-blue-600" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Statutory scrutiny note formatted with GFR 2017 Rule 173 preamble, comparative tables &amp; 3-tier committee sign-offs.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      exportServiceEvaluationToDocx(bidders, criteria, metadata);
+                    }}
+                    className="mt-2.5 w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Download Word (.docx)</span>
+                  </button>
+                </div>
+
+                {/* Uploaded / Custom Format */}
+                <div
+                  onClick={() => {
+                    if (userUploadedTemplate) {
+                      setSelectedFormatTemplateId(userUploadedTemplate.id);
+                      setCustomFormatTextPreview(
+                        generateServiceEvaluationCustomText(
+                          bidders,
+                          criteria,
+                          metadata,
+                          userUploadedTemplate.templateText
+                        )
+                      );
+                    }
+                  }}
+                  className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    selectedFormatTemplateId === userUploadedTemplate?.id
+                      ? "border-purple-500 bg-purple-50/50 shadow-xs"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                      <FileCode className="w-4 h-4 text-purple-600" />
+                      <span>User Uploaded Format</span>
+                    </span>
+                    {selectedFormatTemplateId === userUploadedTemplate?.id && (
+                      <CheckCircle className="w-4 h-4 text-purple-600" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    {userUploadedTemplate
+                      ? `Active: ${userUploadedTemplate.name} (${userUploadedTemplate.charCount} chars)`
+                      : "Upload your department's specific comparative format template (.xlsx, .docx, .txt)."}
+                  </p>
+                  <label className="mt-2.5 w-full py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer">
+                    <Upload className="w-3 h-3" />
+                    <span>{userUploadedTemplate ? "Replace Format Template" : "Upload Format Template"}</span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.docx,.txt,.csv"
+                      onChange={handleUploadFormatTemplate}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Preset selection dropdown */}
+              <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                <span className="text-slate-700 font-semibold flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-slate-600" />
+                  <span>Or Pick Standard Institutional Presets:</span>
+                </span>
+                <select
+                  value={selectedFormatTemplateId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedFormatTemplateId(id);
+                    const preset = PRESET_FORMAT_TEMPLATES.find((p) => p.id === id);
+                    const text = generateServiceEvaluationCustomText(
+                      bidders,
+                      criteria,
+                      metadata,
+                      preset?.templateText
+                    );
+                    setCustomFormatTextPreview(text);
+                  }}
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg bg-white text-slate-800 text-xs focus:outline-blue-500"
+                >
+                  <option value="standard-excel">Standard GFR 2017 &amp; Open Tender Format</option>
+                  <option value="preset-cvc-gfr173">Central PSU Scrutiny Format (CVC / GFR 173 Standard)</option>
+                  <option value="preset-prebid-minutes">GeM Technical Scrutiny &amp; Eligibility Matrix</option>
+                  <option value="preset-board-scrutiny">Tender Committee Board Note &amp; Scrutiny Rubric</option>
+                  {userUploadedTemplate && (
+                    <option value={userUploadedTemplate.id}>Custom: {userUploadedTemplate.name}</option>
+                  )}
+                </select>
+              </div>
+
+              {/* Formatted Text Preview */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-800 flex items-center gap-1">
+                    <Eye className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Preview of Formatted Output (Extracted Information Populated):</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(customFormatTextPreview);
+                        setHasCopiedFormat(true);
+                        setTimeout(() => setHasCopiedFormat(false), 2500);
+                      }}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      {hasCopiedFormat ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      <span>{hasCopiedFormat ? "Copied!" : "Copy Text"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const blob = new Blob([customFormatTextPreview], { type: "text/plain;charset=utf-8" });
+                        triggerFileDownload(blob, `Service_Eligibility_Output_${Date.now()}.txt`);
+                      }}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Download .txt</span>
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  readOnly
+                  rows={12}
+                  value={customFormatTextPreview}
+                  className="w-full p-3 font-mono text-[11px] bg-slate-900 text-slate-100 rounded-xl border border-slate-700 focus:outline-none leading-relaxed"
+                />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-[11px] text-slate-500">
+                The system populates bidder eligibility values, UDINs, and qualifying verdicts into your chosen format.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => exportServiceEvaluationToDocx(bidders, criteria, metadata, undefined, userUploadedTemplate?.name)}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export as Word Document</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportServiceEvaluationToExcel(bidders, criteria, metadata, userUploadedTemplate?.name)}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export as Excel Spreadsheet</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: Inspect Extracted Document Preview */}
+      {previewDocModal && (
+        <div className="fixed inset-0 bg-slate-950/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  <h4 className="font-bold text-slate-900 text-sm">{previewDocModal.name}</h4>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-100 text-blue-800">
+                    {previewDocModal.category}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-3">
+                  <span>Type: <strong>{previewDocModal.fileType.toUpperCase()}</strong></span>
+                  <span>Characters: <strong>{previewDocModal.charCount}</strong></span>
+                  {previewDocModal.sourceArchive && (
+                    <span>Source Archive: <strong className="text-amber-700">{previewDocModal.sourceArchive}</strong></span>
+                  )}
+                  {previewDocModal.pageCount && (
+                    <span>Pages: <strong>{previewDocModal.pageCount}</strong></span>
+                  )}
+                  {previewDocModal.isOcrScanned && (
+                    <span className="text-purple-700 font-semibold">Processed via Browser Image OCR</span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setPreviewDocModal(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 space-y-2">
+              <label className="block text-xs font-semibold text-slate-700">
+                Extracted Text Content (Parsed by Engine):
+              </label>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono text-slate-800 whitespace-pre-wrap leading-relaxed max-h-[50vh] overflow-y-auto">
+                {previewDocModal.extractedText || "No text extracted."}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setPreviewDocModal(null)}
+                className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Close Preview
               </button>
             </div>
           </div>

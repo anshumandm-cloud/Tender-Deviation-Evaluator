@@ -960,7 +960,11 @@ export default function App() {
               }`}
             >
               <FileText className="w-4 h-4 text-blue-600" />
-              <span>1. Tender &amp; Documents Setup</span>
+              <span>
+                {metadata.tenderType === "SERVICES_O_AND_M"
+                  ? "1. Tender & Documents Setup"
+                  : "1. Tender Setup & Contract Baseline"}
+              </span>
               {documents.sbdText && (
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
               )}
@@ -984,7 +988,7 @@ export default function App() {
               <span>
                 {metadata.tenderType === "SERVICES_O_AND_M"
                   ? "2. Individual Bidder Dossier"
-                  : "2. Individual Bidder Evaluation"}
+                  : "2. Individual Bidder Deviations"}
               </span>
               <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded-full font-bold">
                 {metadata.tenderType === "SERVICES_O_AND_M" ? serviceBidders.length : singleEvaluations.length || bidders.length}
@@ -1108,6 +1112,9 @@ export default function App() {
             evaluationStep={evaluationStep}
             onProcurementTypeChange={handleProcurementTypeChange}
             onLogAudit={logAuditAction}
+            serviceCriteria={serviceCriteria}
+            setServiceCriteria={setServiceCriteria}
+            onNavigateToServiceEval={() => setActiveTab("comparative")}
           />
         )}
 

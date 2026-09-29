@@ -15,6 +15,7 @@ import {
   BorderStyle,
 } from "docx";
 import { SingleBidderEvaluation, ComparativeEvaluation, ReviewedClausesData, TenderMetadata, AuditLogEntry, UploadedFormatTemplate } from "../types";
+import { BidderServiceSubmission, ServiceCriteriaRequirement } from "../types/serviceEvaluation";
 
 /**
  * Downloads a file to the user's PC
@@ -2055,5 +2056,412 @@ export function exportAuditTrailToPDF(
   const blob = doc.output("blob");
   const sanitizedTitle = (metadata?.tenderRefNo || metadata?.packageTitle || "Tender").replace(/[^a-zA-Z0-9_-]/g, "_");
   triggerFileDownload(blob, `Tender_Audit_Trail_${sanitizedTitle}.pdf`);
+}
+
+/**
+ * Generates and downloads an Excel spreadsheet for Services (O&M) Eligibility Evaluation
+ * Includes Comparative Statement, Technical Experience Breakdown, and Shortfall Schedule
+ */
+export function exportServiceEvaluationToExcel(
+  bidders: BidderServiceSubmission[],
+  criteria: ServiceCriteriaRequirement,
+  metadata?: TenderMetadata,
+  formatTitle?: string
+) {
+  const wb = XLSX.utils.book_new();
+  const pkgTitle = metadata?.packageTitle || "Service & O&M Contract Package";
+  const refNo = metadata?.tenderRefNo || "Tender-Ref";
+
+  // 1. Executive Summary Sheet
+  const summaryRows = [
+    ["CENTRAL PUBLIC PROCUREMENT - TECHNO-COMMERCIAL ELIGIBILITY SCRUTINY STATEMENT"],
+    [`PACKAGE: ${pkgTitle}`],
+    [`TENDER REF: ${refNo} | EVALUATION DATE: ${new Date().toLocaleDateString("en-IN")}`],
+    [formatTitle ? `FORMAT TEMPLATE: ${formatTitle}` : "FORMAT: Standard GFR 2017 & Open Tender Matrix"],
+    [""],
+    ["A. NIT ELIGIBILITY CRITERIA BENCHMARKS:"],
+    ["1. Financial Turnover Benchmark", `Minimum Average Annual Turnover of Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr in last 3 FYs with CA UDIN`],
+    ["2. Experience Threshold (Single Work)", `At least 1 similar work >= Rs. ${(criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2)} Cr`],
+    ["3. Experience Threshold (Two Works)", `At least 2 similar works >= Rs. ${(criteria.twoWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.5).toFixed(2)} Cr each`],
+    ["4. Experience Threshold (Three Works)", `At least 3 similar works >= Rs. ${(criteria.threeWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.4).toFixed(2)} Cr each`],
+    ["5. Similar Work Definition", criteria.similarWorkDefinition],
+    [""],
+    ["B. BIDDER QUALIFICATION SUMMARY:"],
+    ["Total Bidders Evaluated", bidders.length],
+    ["Techno-Commercially Qualified (Ready for Price Bid)", bidders.filter((b) => b.overallStatus === "RESPONSIVE_QUALIFIED").length],
+    ["Shortfall / Clarification Required", bidders.filter((b) => b.overallStatus === "SHORTFALL_REQUIRED").length],
+    ["Disqualified / Rejected", bidders.filter((b) => b.overallStatus === "REJECTED_DISQUALIFIED").length],
+    ["Banning / Debarment Alerts Flagged", bidders.filter((b) => b.banningStatusAlert.isAlertTriggered).length],
+  ];
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  XLSX.utils.book_append_sheet(wb, wsSummary, "Evaluation Summary");
+
+  // 2. Consolidated Comparative Statement Sheet
+  const comparativeHeaders = [
+    "Sl No",
+    "Bidder Legal Name",
+    "Overall Eligibility Status",
+    "Debarment / Banning Check",
+    "Claimed Avg Turnover (Cr)",
+    "Required Avg Turnover (Cr)",
+    "Turnover Status",
+    "FY 1 Turnover (Cr)",
+    "FY 2 Turnover (Cr)",
+    "FY 3 Turnover (Cr)",
+    "CA UDIN Validated",
+    "Experience Criteria Met",
+    "Single Work Value (Cr)",
+    "Similar Scope Match",
+    "Completion Cert Attached",
+    "Shortfall / Rejection Grounds",
+    "Committee Recommendation",
+    "Submitted Files / Archive Bundle",
+  ];
+
+  const comparativeRows = bidders.map((b, idx) => {
+    const turnovers = b.financialEvaluation.claimedTurnoverByYear || [];
+    const works = b.experienceEvaluation.submittedWorks || [];
+    const maxWorkVal = works.reduce((max, w) => Math.max(max, w.contractValueCr || 0), 0);
+    const scopeMatch = works.some((w) => w.matchesSimilarWorkScope);
+    const certAttached = works.some((w) => w.completionCertificateAttached);
+    const bundlesStr = (b.uploadedBundles || []).map((bun) => `${bun.bundleName} (${bun.totalFilesExtracted} files)`).join("; ") ||
+      `${b.turnoverDocuments.length + b.experienceDocuments.length} files`;
+
+    return [
+      idx + 1,
+      b.bidderName,
+      b.overallStatus,
+      b.banningStatusAlert.isAlertTriggered ? `ALERT: ${b.banningStatusAlert.reason}` : "CLEAN",
+      b.financialEvaluation.averageTurnoverCr.toFixed(2),
+      criteria.minAverageAnnualTurnoverCr.toFixed(2),
+      b.financialEvaluation.status,
+      turnovers[0]?.turnoverCr ? turnovers[0].turnoverCr.toFixed(2) : "N/A",
+      turnovers[1]?.turnoverCr ? turnovers[1].turnoverCr.toFixed(2) : "N/A",
+      turnovers[2]?.turnoverCr ? turnovers[2].turnoverCr.toFixed(2) : "N/A",
+      turnovers.some((t) => t.caUdinPresent) ? "YES" : "MISSING",
+      b.experienceEvaluation.status,
+      maxWorkVal > 0 ? maxWorkVal.toFixed(2) : "0.00",
+      scopeMatch ? "YES" : "NO",
+      certAttached ? "YES" : "NO",
+      [...b.financialEvaluation.reasons, ...b.experienceEvaluation.reasons].join(" | "),
+      b.summaryReason,
+      bundlesStr,
+    ];
+  });
+
+  const wsComparative = XLSX.utils.aoa_to_sheet([comparativeHeaders, ...comparativeRows]);
+  wsComparative["!cols"] = [
+    { wch: 6 },
+    { wch: 28 },
+    { wch: 22 },
+    { wch: 22 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 18 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 22 },
+    { wch: 40 },
+    { wch: 35 },
+    { wch: 30 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsComparative, "Comparative Statement");
+
+  // 3. Technical Works Detail Sheet
+  const worksHeaders = [
+    "Sl No",
+    "Bidder Name",
+    "Work Order / Contract Title",
+    "Client Name & Sector",
+    "Completed Value (Rs Cr)",
+    "Completion Date",
+    "Scope Matches NIT Definition",
+    "Client Completion Certificate",
+    "Satisfactory Performance Report",
+    "Scrutiny Observations",
+  ];
+
+  const worksRows: any[] = [];
+  let wIndex = 1;
+  bidders.forEach((b) => {
+    b.experienceEvaluation.submittedWorks.forEach((work) => {
+      worksRows.push([
+        wIndex++,
+        b.bidderName,
+        work.workTitle,
+        work.clientName,
+        work.contractValueCr.toFixed(2),
+        work.completionDate,
+        work.matchesSimilarWorkScope ? "YES" : "NO (Scope Mismatch)",
+        work.completionCertificateAttached ? "YES (Attached)" : "NO (Missing)",
+        work.satisfactoryPerformanceReportAttached ? "YES" : "NO",
+        work.remarks || "Verified against uploaded document",
+      ]);
+    });
+  });
+
+  const wsWorks = XLSX.utils.aoa_to_sheet([worksHeaders, ...worksRows]);
+  wsWorks["!cols"] = [
+    { wch: 6 },
+    { wch: 26 },
+    { wch: 36 },
+    { wch: 26 },
+    { wch: 18 },
+    { wch: 15 },
+    { wch: 24 },
+    { wch: 22 },
+    { wch: 24 },
+    { wch: 36 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsWorks, "Submitted Past Works");
+
+  const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const filename = `Service_Eligibility_Comparative_${(refNo || "Tender").replace(/[^a-zA-Z0-9_-]/g, "_")}.xlsx`;
+  triggerFileDownload(blob, filename);
+}
+
+/**
+ * Generates and downloads a formal Word (.docx) Scrutiny Note for Services (O&M)
+ */
+export async function exportServiceEvaluationToDocx(
+  bidders: BidderServiceSubmission[],
+  criteria: ServiceCriteriaRequirement,
+  metadata?: TenderMetadata,
+  activeOfficer?: string,
+  formatTitle?: string
+) {
+  const pkgTitle = metadata?.packageTitle || "Service & O&M Contract Package";
+  const refNo = metadata?.tenderRefNo || "Tender-Ref";
+  const officerName = activeOfficer?.split(",")[0] || "Dealing Officer (Contracts)";
+  const dateStr = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+
+  const tableHeaderCell = (text: string) =>
+    new TableCell({
+      children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 18, color: "FFFFFF" })], alignment: AlignmentType.CENTER })],
+      shading: { fill: "1E293B" },
+      margins: { top: 100, bottom: 100, left: 100, right: 100 },
+    });
+
+  const tableBodyCell = (text: string, isBold: boolean = false, align: (typeof AlignmentType)[keyof typeof AlignmentType] = AlignmentType.LEFT) =>
+    new TableCell({
+      children: [new Paragraph({ children: [new TextRun({ text, bold: isBold, size: 17 })], alignment: align })],
+      margins: { top: 80, bottom: 80, left: 100, right: 100 },
+    });
+
+  // Table rows for Comparative Evaluation
+  const evalRows = [
+    new TableRow({
+      children: [
+        tableHeaderCell("Sl"),
+        tableHeaderCell("Bidder Name"),
+        tableHeaderCell("Turnover (Cr)"),
+        tableHeaderCell("UDIN"),
+        tableHeaderCell("Max Work (Cr)"),
+        tableHeaderCell("Scope Match"),
+        tableHeaderCell("Status"),
+        tableHeaderCell("Committee Recommendation"),
+      ],
+    }),
+  ];
+
+  bidders.forEach((b, idx) => {
+    const works = b.experienceEvaluation.submittedWorks || [];
+    const maxWorkVal = works.reduce((max, w) => Math.max(max, w.contractValueCr || 0), 0);
+    const scopeMatch = works.some((w) => w.matchesSimilarWorkScope) ? "Complied" : "Deviated";
+    const udinStatus = (b.financialEvaluation.claimedTurnoverByYear || []).some((t) => t.caUdinPresent) ? "Valid" : "Deficient";
+
+    evalRows.push(
+      new TableRow({
+        children: [
+          tableBodyCell(String(idx + 1), false, AlignmentType.CENTER),
+          tableBodyCell(b.bidderName, true),
+          tableBodyCell(`Rs. ${b.financialEvaluation.averageTurnoverCr.toFixed(2)} Cr`, false, AlignmentType.RIGHT),
+          tableBodyCell(udinStatus, false, AlignmentType.CENTER),
+          tableBodyCell(`Rs. ${maxWorkVal.toFixed(2)} Cr`, false, AlignmentType.RIGHT),
+          tableBodyCell(scopeMatch, false, AlignmentType.CENTER),
+          tableBodyCell(b.overallStatus.replace("_", " "), true),
+          tableBodyCell(b.summaryReason),
+        ],
+      })
+    );
+  });
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          new Paragraph({
+            text: "CONFIDENTIAL - FOR TENDER COMMITTEE & COMPETENT AUTHORITY REVIEW",
+            style: HeadingLevel.HEADING_3,
+            alignment: AlignmentType.RIGHT,
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "TECHNO-COMMERCIAL ELIGIBILITY SCRUTINY & COMPARATIVE NOTE",
+                bold: true,
+                size: 26,
+              }),
+            ],
+            heading: HeadingLevel.HEADING_1,
+            spacing: { before: 200, after: 100 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: `Package Title: `, bold: true }),
+              new TextRun({ text: `${pkgTitle}\n` }),
+              new TextRun({ text: `Tender Ref No: `, bold: true }),
+              new TextRun({ text: `${refNo} | Date: ${dateStr}\n` }),
+              new TextRun({ text: `Regulatory Framework: `, bold: true }),
+              new TextRun({ text: `Rule 173 of General Financial Rules (GFR) 2017 & CVC Procurement Manual\n` }),
+              new TextRun({ text: `Format Compliance: `, bold: true }),
+              new TextRun({ text: formatTitle || "Standard Open Tender Technical Scrutiny Format" }),
+            ],
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "1. QUALIFYING CRITERIA SPECIFIED IN NOTICE INVITING TENDER (NIT)",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 200, after: 100 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "• Financial Criteria: ", bold: true }),
+              new TextRun({
+                text: `Minimum Average Annual Turnover of Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Crores during the last 3 financial years duly certified by a Chartered Accountant with valid Unique Document Identification Number (UDIN).\n`,
+              }),
+              new TextRun({ text: "• Technical Experience: ", bold: true }),
+              new TextRun({
+                text: `Execution of completed similar service works during qualifying period satisfying Single Work >= Rs. ${(criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2)} Cr, or Two Works >= Rs. ${(criteria.twoWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.5).toFixed(2)} Cr each, or Three Works >= Rs. ${(criteria.threeWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.4).toFixed(2)} Cr each.\n`,
+              }),
+              new TextRun({ text: "• Similar Work Definition: ", bold: true }),
+              new TextRun({ text: `"${criteria.similarWorkDefinition}"\n` }),
+            ],
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "2. COMPARATIVE STATEMENT OF PARTICIPATING BIDDERS",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 200, after: 100 },
+          }),
+          new Table({
+            rows: evalRows,
+            width: { size: 100, type: WidthType.PERCENTAGE },
+          }),
+
+          new Paragraph({
+            text: "3. TENDER COMMITTEE RECOMMENDATIONS & SIGN-OFF",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 300, after: 100 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `The scrutiny committee has evaluated the bids against the stipulated NIT provisions, GFR 2017 Rule 173, and published shortfall guidelines. Qualified bidders are recommended for opening of price bids. Deficient bidders have been scheduled for shortfall/clarification as per documented rules.\n\n`,
+              }),
+              new TextRun({ text: `Dealing Officer: ${officerName}\t\tFinance Concurrence: ____________________\t\tCompetent Authority: ____________________\n`, bold: true }),
+            ],
+            spacing: { after: 200 },
+          }),
+        ],
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const filename = `Service_Eligibility_Scrutiny_Note_${(refNo || "Tender").replace(/[^a-zA-Z0-9_-]/g, "_")}.docx`;
+  triggerFileDownload(blob, filename);
+}
+
+/**
+ * Maps Bidder Eligibility Findings to User's Uploaded Custom Format or Presets
+ */
+export function generateServiceEvaluationCustomText(
+  bidders: BidderServiceSubmission[],
+  criteria: ServiceCriteriaRequirement,
+  metadata?: TenderMetadata,
+  templateText?: string
+): string {
+  const pkgTitle = metadata?.packageTitle || "Service Contract Package";
+  const refNo = metadata?.tenderRefNo || "Tender-Ref";
+  const dateStr = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+
+  const qualifiedList = bidders.filter((b) => b.overallStatus === "RESPONSIVE_QUALIFIED").map((b) => b.bidderName).join(", ") || "None";
+  const shortfallList = bidders.filter((b) => b.overallStatus === "SHORTFALL_REQUIRED").map((b) => `${b.bidderName} (Deficiency: ${[...b.financialEvaluation.reasons, ...b.experienceEvaluation.reasons].join("; ")})`).join("\n  • ") || "None";
+  const rejectedList = bidders.filter((b) => b.overallStatus === "REJECTED_DISQUALIFIED").map((b) => `${b.bidderName} (Grounds: ${[...b.financialEvaluation.reasons, ...b.experienceEvaluation.reasons].join("; ")})`).join("\n  • ") || "None";
+
+  // Build comparative table string
+  let tableStr = `| Sl | Bidder Name | Overall Status | Claimed Avg Turnover | Required Turnover | UDIN | Max Work Value | Scope Match | Recommendation |\n`;
+  tableStr += `|:---|:---|:---|:---|:---|:---|:---|:---|:---|\n`;
+  bidders.forEach((b, idx) => {
+    const works = b.experienceEvaluation.submittedWorks || [];
+    const maxWorkVal = works.reduce((max, w) => Math.max(max, w.contractValueCr || 0), 0);
+    const scopeMatch = works.some((w) => w.matchesSimilarWorkScope) ? "Complied" : "Deviated";
+    const udinStatus = (b.financialEvaluation.claimedTurnoverByYear || []).some((t) => t.caUdinPresent) ? "Valid" : "Missing";
+
+    tableStr += `| ${idx + 1} | ${b.bidderName} | ${b.overallStatus} | Rs. ${b.financialEvaluation.averageTurnoverCr.toFixed(2)} Cr | Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr | ${udinStatus} | Rs. ${maxWorkVal.toFixed(2)} Cr | ${scopeMatch} | ${b.summaryReason} |\n`;
+  });
+
+  if (templateText && templateText.trim().length > 50) {
+    let populated = templateText;
+    populated = populated.replace(/\[PACKAGE_TITLE\]/gi, pkgTitle);
+    populated = populated.replace(/\[TENDER_REF\]/gi, refNo);
+    populated = populated.replace(/\[REF_NO\]/gi, refNo);
+    populated = populated.replace(/\[DATE\]/gi, dateStr);
+    populated = populated.replace(/\[EVALUATION_DATE\]/gi, dateStr);
+    populated = populated.replace(/\[MIN_TURNOVER\]/gi, `Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr`);
+    populated = populated.replace(/\[SIMILAR_WORK\]/gi, criteria.similarWorkDefinition);
+    populated = populated.replace(/\[QUALIFIED_BIDDERS\]/gi, qualifiedList);
+    populated = populated.replace(/\[SHORTFALL_BIDDERS\]/gi, shortfallList);
+    populated = populated.replace(/\[DISQUALIFIED_BIDDERS\]/gi, rejectedList);
+    populated = populated.replace(/\[COMPARATIVE_TABLE\]/gi, tableStr);
+
+    // If template didn't have specific placeholders, append the comparative table cleanly
+    if (!populated.includes(tableStr) && !templateText.includes("[COMPARATIVE_TABLE]")) {
+      populated += `\n\n=== EXTRACTED TECHNO-COMMERCIAL COMPARATIVE DATA (AS PER FORMAT) ===\n\n` + tableStr;
+    }
+    return populated;
+  }
+
+  // Default Standard Format
+  return `CENTRAL PUBLIC PROCUREMENT - TECHNO-COMMERCIAL EVALUATION STATEMENT
+PACKAGE: ${pkgTitle}
+TENDER REFERENCE: ${refNo} | DATE: ${dateStr}
+REGULATORY BENCHMARK: General Financial Rules (GFR) 2017 Rule 173 & CVC Manual
+
+1. NIT QUALIFYING CRITERIA SPECIFICATION:
+- Minimum Average Annual Turnover: Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Crores (last 3 FYs with CA UDIN)
+- Technical Experience (Completed Similar Works Threshold):
+  * Single Work >= Rs. ${(criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2)} Cr
+  * Two Works >= Rs. ${(criteria.twoWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.5).toFixed(2)} Cr each
+  * Three Works >= Rs. ${(criteria.threeWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.4).toFixed(2)} Cr each
+- Similar Work Scope Definition: "${criteria.similarWorkDefinition}"
+
+2. CONSOLIDATED COMPARATIVE EVALUATION MATRIX:
+${tableStr}
+
+3. SCRUTINY COMMITTEE FINDINGS:
+• Responsive & Qualified Bidders: ${qualifiedList}
+• Shortfall / Clarification Cases:
+  • ${shortfallList}
+• Disqualified / Rejected Offers:
+  • ${rejectedList}
+
+4. RECOMMENDATIONS FOR COMPETENT AUTHORITY:
+1. Approve the qualification of responsive bidders for subsequent opening of price bids.
+2. Issue standard shortfall notices to bidders requiring minor procedural clarification without altering original bid parameters.
+3. Debarment & Banning register status: Verified clean across all participating entities.
+
+Dealing Officer (Contracts)\t\tFinance Member\t\tCompetent Authority`;
 }
 
