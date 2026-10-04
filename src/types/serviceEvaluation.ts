@@ -107,7 +107,7 @@ export interface BidderServiceSubmission {
       matchesSimilarWorkScope: boolean;
       completionCertificateAttached: boolean;
       satisfactoryPerformanceReportAttached: boolean;
-      remarks: string;
+      remarks?: string;
     }[];
     status: "QUALIFIED" | "SHORTFALL" | "REJECTED";
     reasons: string[];

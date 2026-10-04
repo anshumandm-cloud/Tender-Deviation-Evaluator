@@ -29,12 +29,14 @@ import {
   OfficerDirective,
   UploadedFormatTemplate,
   ReviewedClause,
+  ComparativeEvaluation,
 } from "../types";
 import {
   exportReviewedClausesToWord,
   exportReviewedClausesToExcel,
   exportReviewedClausesToCSV,
   exportReviewedClausesToPDF,
+  exportComprehensiveEvaluationToPDF,
 } from "../utils/exportUtils";
 import { computeWordDiff } from "../utils/diffUtils";
 import { ClauseCompareModal } from "./ClauseCompareModal";
@@ -91,6 +93,7 @@ export function compareClauseNumbers(a: string, b: string): number {
 
 interface HarmonizedClausesTabProps {
   reviewedData: ReviewedClausesData | null;
+  comparativeData?: ComparativeEvaluation | null;
   metadata?: TenderMetadata;
   onGenerateReviewedClauses: () => void;
   isGenerating: boolean;
@@ -102,6 +105,7 @@ interface HarmonizedClausesTabProps {
 
 export const HarmonizedClausesTab: React.FC<HarmonizedClausesTabProps> = ({
   reviewedData,
+  comparativeData,
   metadata,
   onGenerateReviewedClauses,
   isGenerating,
@@ -404,14 +408,33 @@ export const HarmonizedClausesTab: React.FC<HarmonizedClausesTabProps> = ({
             </button>
 
             <button
+              id="download-full-evaluation-pdf-btn"
+              onClick={() =>
+                exportComprehensiveEvaluationToPDF(
+                  comparativeData || null,
+                  dataToExport,
+                  metadata,
+                  undefined,
+                  activeFormatTemplate
+                )
+              }
+              className="px-4 py-2 bg-gradient-to-r from-rose-700 to-red-800 hover:from-rose-600 hover:to-red-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-all cursor-pointer hover:shadow ring-1 ring-rose-400/50"
+              title="Download complete evaluation report (Comparative Deviation Matrix + Harmonized Addendum Clauses + Committee Sign-Off) in a professionally formatted PDF"
+            >
+              <FileText className="w-4 h-4 text-rose-200" />
+              <span>Export Full Evaluation PDF</span>
+              <span className="text-[10px] bg-rose-950/60 text-rose-200 px-1.5 py-0.5 rounded font-mono font-medium">Matrix + Clauses</span>
+            </button>
+
+            <button
               id="download-reviewed-clauses-pdf-btn"
               onClick={() => exportReviewedClausesToPDF(dataToExport, metadata, activeFormatTemplate)}
-              className="px-4 py-2 bg-rose-700 hover:bg-rose-600 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-all cursor-pointer hover:shadow"
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-2 transition-all cursor-pointer hover:shadow border border-slate-700"
               title={`Download draft Addendum & Harmonized Clauses as a formatted PDF document using currently applied template (${activeFormatTemplate ? activeFormatTemplate.name : "CVC / GFR 173 Standard"}), including organization header and statutory disclaimer`}
             >
-              <FileText className="w-4 h-4" />
-              <span>Download as PDF</span>
-              <span className="text-[10px] bg-rose-800/80 px-1.5 py-0.5 rounded font-mono font-normal">.pdf</span>
+              <FileText className="w-4 h-4 text-rose-400" />
+              <span>Addendum PDF</span>
+              <span className="text-[10px] bg-slate-900 px-1.5 py-0.5 rounded font-mono font-normal">.pdf</span>
             </button>
 
             <button

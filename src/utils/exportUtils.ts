@@ -551,6 +551,708 @@ export async function exportComparativeToWord(compData: ComparativeEvaluation) {
 }
 
 /**
+ * Generates and downloads a formal PDF document for the Comparative Deviation Matrix
+ */
+export function exportComparativeToPDF(
+  compData: ComparativeEvaluation,
+  metadata?: TenderMetadata
+) {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+
+  const primaryNavy: [number, number, number] = [15, 23, 42];
+  const accentBlue: [number, number, number] = [30, 58, 138];
+  const borderGray: [number, number, number] = [203, 213, 225];
+  const bgLight: [number, number, number] = [248, 250, 252];
+
+  let currentY = 14;
+
+  // Organization Header
+  const orgName = (
+    metadata?.organization || "CENTRAL PUBLIC SECTOR UNDERTAKING / CONTRACTS & PROCUREMENT CELL"
+  ).toUpperCase();
+
+  doc.setFillColor(...primaryNavy);
+  doc.roundedRect(margin, currentY, contentWidth, 18, 1.5, 1.5, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(255, 255, 255);
+  doc.text(orgName, pageWidth / 2, currentY + 6.5, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(203, 213, 225);
+  doc.text(
+    "CONSOLIDATED TECHNO-COMMERCIAL COMPARATIVE STATEMENT (COMMON STUDY)",
+    pageWidth / 2,
+    currentY + 11.5,
+    { align: "center" }
+  );
+
+  doc.setFontSize(6.8);
+  doc.setTextColor(148, 163, 184);
+  const subTitle = `Tender Package: ${compData.packageTitle || metadata?.packageTitle || "Turnkey Works"} | Ref: ${
+    metadata?.tenderRefNo || "NIT/SBD-EVAL"
+  }`;
+  doc.text(subTitle.slice(0, 110), pageWidth / 2, currentY + 15.5, { align: "center" });
+
+  currentY += 22;
+
+  // Metadata Table
+  const metaRows = [
+    [
+      { content: "Tender Ref No:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: metadata?.tenderRefNo || "NIT/TENDER-REF" },
+      { content: "Evaluation Date:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: compData.evaluationDate || new Date().toISOString().split("T")[0] },
+    ],
+    [
+      { content: "Package Title:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: compData.packageTitle || metadata?.packageTitle || "—" },
+      { content: "Total Bidders:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: `${compData.totalBiddersEvaluated} Participating Bidders` },
+    ],
+    [
+      { content: "Department:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: "Contracts & Procurement Division" },
+      { content: "Governing Law:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: "GFR 2017 (Rule 173) & CVC Procurement Guidelines" },
+    ],
+  ];
+
+  autoTable(doc, {
+    startY: currentY,
+    body: metaRows,
+    theme: "grid",
+    styles: { fontSize: 7, cellPadding: 1.8, textColor: [30, 41, 59], lineColor: borderGray, lineWidth: 0.2 },
+    columnStyles: {
+      0: { cellWidth: 28 },
+      1: { cellWidth: 63 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 63 },
+    },
+    margin: { left: margin, right: margin },
+  });
+
+  currentY = (doc as any).lastAutoTable?.finalY + 6 || currentY + 25;
+
+  // Bidder Summary Table
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...primaryNavy);
+  doc.text("1. Participating Bidders & Techno-Commercial Posture Summary", margin, currentY);
+  currentY += 3;
+
+  const bidderHeaders = [
+    ["Sl", "Bidder Name", "Total Deviations", "Critical / High-Risk", "General Posture", "Tender Committee Recommendation"],
+  ];
+  const bidderData = compData.biddersSummary.map((b, idx) => [
+    idx + 1,
+    b.bidderName,
+    b.deviationCount,
+    b.criticalDeviations,
+    b.generalPosture,
+    b.overallRecommendation,
+  ]);
+
+  autoTable(doc, {
+    startY: currentY,
+    head: bidderHeaders,
+    body: bidderData,
+    theme: "grid",
+    headStyles: { fillColor: accentBlue, textColor: 255, fontSize: 7.2, fontStyle: "bold", cellPadding: 2 },
+    bodyStyles: { fontSize: 7, textColor: [30, 41, 59], cellPadding: 2, lineColor: borderGray, lineWidth: 0.2 },
+    alternateRowStyles: { fillColor: bgLight },
+    columnStyles: {
+      0: { cellWidth: 8, halign: "center" },
+      1: { cellWidth: 42, fontStyle: "bold" },
+      2: { cellWidth: 24, halign: "center" },
+      3: { cellWidth: 26, halign: "center" },
+      4: { cellWidth: 26, halign: "center" },
+      5: { cellWidth: 56 },
+    },
+    margin: { left: margin, right: margin },
+  });
+
+  currentY = (doc as any).lastAutoTable?.finalY + 6 || currentY + 25;
+
+  // Comparative Matrix Table
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...primaryNavy);
+  doc.text("2. Consolidated Comparative Deviation Matrix (Common Scrutiny)", margin, currentY);
+  currentY += 3;
+
+  const matrixHeaders = [
+    ["Clause / Theme", "Original SBD Provision", "Bidder Stances & Quoted Deviations", "Dealing Officer's Comparative Analysis", "Harmonized Recommendation"],
+  ];
+
+  const matrixBody = compData.comparativeMatrix.map((row) => {
+    const stancesText = row.bidderStances
+      .map((s) => `• [${s.bidderName}] (Action: ${s.action}):\n  "${s.quotedDeviation}"`)
+      .join("\n\n");
+
+    return [
+      row.clauseOrTheme,
+      row.tenderSBDProvision,
+      stancesText,
+      row.officerComparativeAnalysis,
+      row.recommendedHarmonizedStrategy,
+    ];
+  });
+
+  autoTable(doc, {
+    startY: currentY,
+    head: matrixHeaders,
+    body: matrixBody,
+    theme: "grid",
+    headStyles: { fillColor: primaryNavy, textColor: 255, fontSize: 7.2, fontStyle: "bold", cellPadding: 2.2 },
+    bodyStyles: { fontSize: 6.8, textColor: [30, 41, 59], cellPadding: 2.2, lineColor: borderGray, lineWidth: 0.2 },
+    alternateRowStyles: { fillColor: bgLight },
+    columnStyles: {
+      0: { cellWidth: 28, fontStyle: "bold" },
+      1: { cellWidth: 36 },
+      2: { cellWidth: 46 },
+      3: { cellWidth: 36 },
+      4: { cellWidth: 36 },
+    },
+    margin: { left: margin, right: margin },
+  });
+
+  currentY = (doc as any).lastAutoTable?.finalY + 6 || currentY + 30;
+
+  // Common Deadlock Areas
+  if (compData.commonDeadlockAreas && compData.commonDeadlockAreas.length > 0) {
+    if (currentY > pageHeight - 50) {
+      doc.addPage();
+      currentY = 16;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...primaryNavy);
+    doc.text("3. Industry Deadlock Areas & Compromise Strategies", margin, currentY);
+    currentY += 3;
+
+    const deadlockHeaders = [["Topic / Clause", "Industry Pushback Reasons", "Recommended Way Forward / Safeguards"]];
+    const deadlockData = compData.commonDeadlockAreas.map((d) => [d.topic, d.reasons, d.recommendedWayForward]);
+
+    autoTable(doc, {
+      startY: currentY,
+      head: deadlockHeaders,
+      body: deadlockData,
+      theme: "grid",
+      headStyles: { fillColor: [180, 83, 9], textColor: 255, fontSize: 7.2, fontStyle: "bold", cellPadding: 2 },
+      bodyStyles: { fontSize: 6.8, textColor: [30, 41, 59], cellPadding: 2, lineColor: borderGray, lineWidth: 0.2 },
+      alternateRowStyles: { fillColor: bgLight },
+      columnStyles: {
+        0: { cellWidth: 35, fontStyle: "bold" },
+        1: { cellWidth: 70 },
+        2: { cellWidth: 77 },
+      },
+      margin: { left: margin, right: margin },
+    });
+
+    currentY = (doc as any).lastAutoTable?.finalY + 6 || currentY + 30;
+  }
+
+  // Page Numbers and Footer
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        `${compData.packageTitle || metadata?.packageTitle || "Tender Evaluation"} | ${metadata?.tenderRefNo || "Ref No"}`,
+        margin,
+        9
+      );
+      doc.text("CONFIDENTIAL - CONTRACT EVALUATION CELL", pageWidth - margin, 9, { align: "right" });
+      doc.setDrawColor(...borderGray);
+      doc.setLineWidth(0.3);
+      doc.line(margin, 10.5, pageWidth - margin, 10.5);
+    }
+
+    doc.setDrawColor(...borderGray);
+    doc.setLineWidth(0.3);
+    doc.line(margin, pageHeight - 11, pageWidth - margin, pageHeight - 11);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Public Sector Procurement Compliance • Rule 173 GFR 2017 & CVC Guidelines", margin, pageHeight - 7);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 7, { align: "right" });
+  }
+
+  const filename = `Comparative_Deviation_Matrix_${(compData.packageTitle || "Tender").replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`;
+  doc.save(filename);
+}
+
+/**
+ * Generates and downloads a complete, unified Executive PDF report including:
+ * 1. Document Cover & Metadata
+ * 2. Executive Summary & Bidders Compliance Overview
+ * 3. Consolidated Comparative Deviation Matrix
+ * 4. Common Deadlock Areas & Industry Resolution
+ * 5. Reviewed Clauses & Harmonized Corrigendum Addendum Schedule
+ * 6. Statutory Tender Committee Sign-Off Matrix
+ */
+export function exportComprehensiveEvaluationToPDF(
+  comparativeData: ComparativeEvaluation | null,
+  reviewedData: ReviewedClausesData | null,
+  metadata?: TenderMetadata,
+  officerProfile?: string,
+  formatTemplate?: UploadedFormatTemplate | null,
+  singleEvaluations?: SingleBidderEvaluation[]
+) {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+  const pageHeight = doc.internal.pageSize.getHeight(); // 297mm
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2; // 182mm
+
+  // Professional Color Palette
+  const primaryNavy: [number, number, number] = [15, 23, 42]; // #0f172a
+  const accentBlue: [number, number, number] = [30, 58, 138]; // #1e3a8a
+  const emeraldGreen: [number, number, number] = [22, 101, 52]; // #166534
+  const borderGray: [number, number, number] = [203, 213, 225]; // #cbd5e1
+  const bgLight: [number, number, number] = [248, 250, 252]; // #f8fafc
+
+  let currentY = 14;
+
+  const pkgTitle = metadata?.packageTitle || comparativeData?.packageTitle || reviewedData?.packageTitle || "Turnkey Works Contract Package";
+  const refNo = metadata?.tenderRefNo || "NIT/SBD-EVAL/2026";
+  const orgName = (metadata?.organization || "CENTRAL PUBLIC SECTOR UNDERTAKING / CONTRACTS CELL").toUpperCase();
+  const activeOfficer = officerProfile || "Dealing Officer / Manager (Contracts & Procurement)";
+  const evalDate = comparativeData?.evaluationDate || new Date().toISOString().split("T")[0];
+
+  // 1. OFFICIAL LETTERHEAD & BANNER
+  doc.setFillColor(...primaryNavy);
+  doc.roundedRect(margin, currentY, contentWidth, 20, 1.5, 1.5, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(255, 255, 255);
+  doc.text(orgName, pageWidth / 2, currentY + 6.5, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(203, 213, 225);
+  doc.text(
+    "DIRECTORATE OF PROJECT CONTRACTS & COMMERCIAL LAW | TENDER EVALUATION COMMITTEE",
+    pageWidth / 2,
+    currentY + 11.5,
+    { align: "center" }
+  );
+
+  doc.setFontSize(6.8);
+  doc.setTextColor(148, 163, 184);
+  doc.text(
+    `Package: ${pkgTitle.slice(0, 75)} | Ref: ${refNo}`,
+    pageWidth / 2,
+    currentY + 16.5,
+    { align: "center" }
+  );
+
+  currentY += 24;
+
+  // Title Strip
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(...accentBlue);
+  doc.text("COMPREHENSIVE TECHNO-COMMERCIAL EVALUATION REPORT & HARMONIZED ADDENDUM", pageWidth / 2, currentY, { align: "center" });
+
+  currentY += 4.5;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    "Statutory Multi-Bidder Scrutiny, Consolidated Deviation Matrix & Formulated Addendum Clauses (GFR 2017 Rule 173 & CVC Manual)",
+    pageWidth / 2,
+    currentY,
+    { align: "center" }
+  );
+
+  currentY += 4;
+
+  // Format Template Badge if applied
+  if (formatTemplate || reviewedData?.appliedFormatTitle) {
+    const tmplName = formatTemplate?.name || reviewedData?.appliedFormatTitle || "Standard CVC/GFR Format";
+    doc.setFillColor(241, 245, 249);
+    doc.setDrawColor(...borderGray);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(margin, currentY, contentWidth, 5.5, 1, 1, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(30, 58, 138);
+    doc.text(`APPLIED REPORT TEMPLATE: ${tmplName.toUpperCase()}`, margin + 3, currentY + 3.8);
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 116, 139);
+    doc.text("Dealing Officer Formatted", pageWidth - margin - 3, currentY + 3.8, { align: "right" });
+    currentY += 8;
+  }
+
+  // Tender Metadata Grid
+  const metaRows = [
+    [
+      { content: "Tender Ref No:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: refNo },
+      { content: "Evaluation Date:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: evalDate },
+    ],
+    [
+      { content: "Package Title:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: pkgTitle },
+      { content: "Dealing Officer:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: activeOfficer },
+    ],
+    [
+      { content: "Department:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: "Contracts & Procurement Division" },
+      { content: "Participating Bidders:", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: `${comparativeData?.totalBiddersEvaluated || singleEvaluations?.length || 0} Evaluated Entities` },
+    ],
+  ];
+
+  autoTable(doc, {
+    startY: currentY,
+    body: metaRows,
+    theme: "grid",
+    styles: { fontSize: 7, cellPadding: 1.8, textColor: [30, 41, 59], lineColor: borderGray, lineWidth: 0.2 },
+    columnStyles: {
+      0: { cellWidth: 28 },
+      1: { cellWidth: 63 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 63 },
+    },
+    margin: { left: margin, right: margin },
+  });
+
+  currentY = (doc as any).lastAutoTable?.finalY + 6 || currentY + 25;
+
+  // SECTION 1: EXECUTIVE SUMMARY & BIDDER COMPLIANCE
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...primaryNavy);
+  doc.text("SECTION 1: EXECUTIVE EVALUATION SUMMARY & BIDDER POSTURES", margin, currentY);
+  currentY += 3;
+
+  if (comparativeData?.biddersSummary && comparativeData.biddersSummary.length > 0) {
+    const bidderHeaders = [
+      ["Sl", "Bidder Name", "Deviations Quoted", "Critical / High-Risk", "Posture", "Tender Committee Recommendation"],
+    ];
+    const bidderData = comparativeData.biddersSummary.map((b, idx) => [
+      idx + 1,
+      b.bidderName,
+      b.deviationCount,
+      b.criticalDeviations,
+      b.generalPosture,
+      b.overallRecommendation,
+    ]);
+
+    autoTable(doc, {
+      startY: currentY,
+      head: bidderHeaders,
+      body: bidderData,
+      theme: "grid",
+      headStyles: { fillColor: accentBlue, textColor: 255, fontSize: 7.2, fontStyle: "bold", cellPadding: 2 },
+      bodyStyles: { fontSize: 7, textColor: [30, 41, 59], cellPadding: 2, lineColor: borderGray, lineWidth: 0.2 },
+      alternateRowStyles: { fillColor: bgLight },
+      columnStyles: {
+        0: { cellWidth: 8, halign: "center" },
+        1: { cellWidth: 42, fontStyle: "bold" },
+        2: { cellWidth: 24, halign: "center" },
+        3: { cellWidth: 26, halign: "center" },
+        4: { cellWidth: 24, halign: "center" },
+        5: { cellWidth: 58 },
+      },
+      margin: { left: margin, right: margin },
+    });
+
+    currentY = (doc as any).lastAutoTable?.finalY + 6 || currentY + 25;
+  }
+
+  // Executive Narrative Note
+  if (comparativeData?.comparativeExecutiveSummary) {
+    if (currentY > pageHeight - 40) {
+      doc.addPage();
+      currentY = 16;
+    }
+
+    doc.setFillColor(bgLight[0], bgLight[1], bgLight[2]);
+    doc.setDrawColor(...borderGray);
+    doc.setLineWidth(0.2);
+
+    const summaryLines = doc.splitTextToSize(comparativeData.comparativeExecutiveSummary, contentWidth - 6);
+    const boxHeight = Math.min(summaryLines.length * 3.5 + 8, 45);
+
+    doc.roundedRect(margin, currentY, contentWidth, boxHeight, 1, 1, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...primaryNavy);
+    doc.text("Executive Scrutiny Overview:", margin + 3, currentY + 4.5);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.8);
+    doc.setTextColor(51, 65, 85);
+    doc.text(summaryLines.slice(0, 10), margin + 3, currentY + 8.5);
+
+    currentY += boxHeight + 6;
+  }
+
+  // SECTION 2: CONSOLIDATED COMPARATIVE DEVIATION MATRIX
+  if (comparativeData?.comparativeMatrix && comparativeData.comparativeMatrix.length > 0) {
+    if (currentY > pageHeight - 55) {
+      doc.addPage();
+      currentY = 16;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...primaryNavy);
+    doc.text("SECTION 2: CONSOLIDATED COMPARATIVE DEVIATION MATRIX (COMMON SCRUTINY)", margin, currentY);
+    currentY += 3;
+
+    const matrixHeaders = [
+      ["Clause / Theme", "Original SBD Provision", "Bidder Stances & Quoted Deviations", "Dealing Officer's Comparative Analysis", "Harmonized Recommendation"],
+    ];
+
+    const matrixBody = comparativeData.comparativeMatrix.map((row) => {
+      const stancesText = row.bidderStances
+        .map((s) => `• [${s.bidderName}] (Action: ${s.action}):\n  "${s.quotedDeviation}"`)
+        .join("\n\n");
+
+      return [
+        row.clauseOrTheme,
+        row.tenderSBDProvision,
+        stancesText,
+        row.officerComparativeAnalysis,
+        row.recommendedHarmonizedStrategy,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: currentY,
+      head: matrixHeaders,
+      body: matrixBody,
+      theme: "grid",
+      headStyles: { fillColor: primaryNavy, textColor: 255, fontSize: 7.2, fontStyle: "bold", cellPadding: 2.2 },
+      bodyStyles: { fontSize: 6.8, textColor: [30, 41, 59], cellPadding: 2.2, lineColor: borderGray, lineWidth: 0.2 },
+      alternateRowStyles: { fillColor: bgLight },
+      columnStyles: {
+        0: { cellWidth: 28, fontStyle: "bold" },
+        1: { cellWidth: 36 },
+        2: { cellWidth: 46 },
+        3: { cellWidth: 36 },
+        4: { cellWidth: 36 },
+      },
+      margin: { left: margin, right: margin },
+    });
+
+    currentY = (doc as any).lastAutoTable?.finalY + 6 || currentY + 30;
+  }
+
+  // Deadlock Areas
+  if (comparativeData?.commonDeadlockAreas && comparativeData.commonDeadlockAreas.length > 0) {
+    if (currentY > pageHeight - 50) {
+      doc.addPage();
+      currentY = 16;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...primaryNavy);
+    doc.text("Industry Deadlock Areas & Resolution Strategies", margin, currentY);
+    currentY += 3;
+
+    const deadlockHeaders = [["Topic / Clause", "Industry Pushback Reasons", "Recommended Way Forward / Safeguards"]];
+    const deadlockData = comparativeData.commonDeadlockAreas.map((d) => [d.topic, d.reasons, d.recommendedWayForward]);
+
+    autoTable(doc, {
+      startY: currentY,
+      head: deadlockHeaders,
+      body: deadlockData,
+      theme: "grid",
+      headStyles: { fillColor: [180, 83, 9], textColor: 255, fontSize: 7, fontStyle: "bold", cellPadding: 2 },
+      bodyStyles: { fontSize: 6.8, textColor: [30, 41, 59], cellPadding: 2, lineColor: borderGray, lineWidth: 0.2 },
+      alternateRowStyles: { fillColor: bgLight },
+      columnStyles: {
+        0: { cellWidth: 35, fontStyle: "bold" },
+        1: { cellWidth: 70 },
+        2: { cellWidth: 77 },
+      },
+      margin: { left: margin, right: margin },
+    });
+
+    currentY = (doc as any).lastAutoTable?.finalY + 6 || currentY + 30;
+  }
+
+  // SECTION 3: REVIEWED CLAUSES & HARMONIZED ADDENDUM FORMULATIONS
+  if (reviewedData?.reviewedClauses && reviewedData.reviewedClauses.length > 0) {
+    if (currentY > pageHeight - 55) {
+      doc.addPage();
+      currentY = 16;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(...primaryNavy);
+    doc.text("SECTION 3: REVIEWED CLAUSES & HARMONIZED ADDENDUM FORMULATIONS", margin, currentY);
+    currentY += 3;
+
+    // Preamble Box
+    if (reviewedData.draftAddendumPreamble) {
+      doc.setFillColor(bgLight[0], bgLight[1], bgLight[2]);
+      doc.setDrawColor(...borderGray);
+      doc.setLineWidth(0.2);
+
+      const preambleLines = doc.splitTextToSize(reviewedData.draftAddendumPreamble, contentWidth - 6);
+      const boxHeight = Math.min(preambleLines.length * 3.4 + 8, 38);
+
+      doc.roundedRect(margin, currentY, contentWidth, boxHeight, 1, 1, "FD");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(...emeraldGreen);
+      doc.text("Statutory Addendum Preamble (Rule 173 GFR 2017):", margin + 3, currentY + 4.5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.8);
+      doc.setTextColor(51, 65, 85);
+      doc.text(preambleLines.slice(0, 8), margin + 3, currentY + 8.5);
+
+      currentY += boxHeight + 5;
+    }
+
+    const clauseHeaders = [
+      ["Clause Ref & Title", "Original SBD Provision", "Proposed Harmonized / Corrigendum Clause", "Contractual Rationale & Safeguards"],
+    ];
+
+    const clauseBody = reviewedData.reviewedClauses.map((c) => {
+      const safeguardsNotes = [
+        `Risk: ${c.riskScore || "Standard"}`,
+        c.protectiveSafeguardsRetained ? `Safeguards: ${c.protectiveSafeguardsRetained}` : "",
+        c.approvalPrerequisite ? `Prerequisite: ${c.approvalPrerequisite}` : "",
+        c.auditDefenseRationale ? `Audit Rationale: ${c.auditDefenseRationale}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      return [
+        `Clause ${c.clauseNumber}\n${c.clauseTitle}`,
+        c.originalClauseText,
+        c.proposedReviewedClauseText,
+        safeguardsNotes,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: currentY,
+      head: clauseHeaders,
+      body: clauseBody,
+      theme: "grid",
+      headStyles: { fillColor: emeraldGreen, textColor: 255, fontSize: 7.2, fontStyle: "bold", cellPadding: 2.2 },
+      bodyStyles: { fontSize: 6.8, textColor: [30, 41, 59], cellPadding: 2.2, lineColor: borderGray, lineWidth: 0.2 },
+      alternateRowStyles: { fillColor: bgLight },
+      columnStyles: {
+        0: { cellWidth: 28, fontStyle: "bold" },
+        1: { cellWidth: 46 },
+        2: { cellWidth: 54 },
+        3: { cellWidth: 54 },
+      },
+      margin: { left: margin, right: margin },
+    });
+
+    currentY = (doc as any).lastAutoTable?.finalY + 6 || currentY + 30;
+  }
+
+  // SECTION 4: STATUTORY SIGN-OFF MATRIX
+  if (currentY > pageHeight - 50) {
+    doc.addPage();
+    currentY = 16;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...primaryNavy);
+  doc.text("SECTION 4: TENDER SCRUTINY COMMITTEE SIGN-OFF & APPROVAL MATRIX", margin, currentY);
+  currentY += 3;
+
+  const signOffRows = [
+    [
+      { content: "Designated Dealing Officer", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: "Finance Member / Concurrence", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: "Technical Committee Member", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+      { content: "Competent Authority (CA)", styles: { fontStyle: "bold" as const, fillColor: bgLight } },
+    ],
+    [
+      { content: `Signature: __________________\nName: ${activeOfficer}\nDate: ${evalDate}\nStatus: Recommended` },
+      { content: "Signature: __________________\nName: _____________________\nDate: _____________________\nConcurrence: Financial Safe" },
+      { content: "Signature: __________________\nName: _____________________\nDate: _____________________\nStatus: Tech Complied" },
+      { content: "Signature: __________________\nName: _____________________\nDate: _____________________\nDecision: Approved / Addendum" },
+    ],
+  ];
+
+  autoTable(doc, {
+    startY: currentY,
+    body: signOffRows,
+    theme: "grid",
+    styles: { fontSize: 7, cellPadding: 3, textColor: [30, 41, 59], lineColor: borderGray, lineWidth: 0.2 },
+    columnStyles: {
+      0: { cellWidth: 45.5 },
+      1: { cellWidth: 45.5 },
+      2: { cellWidth: 45.5 },
+      3: { cellWidth: 45.5 },
+    },
+    margin: { left: margin, right: margin },
+  });
+
+  // Page Numbers and Footer across all pages
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    if (i > 1) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`${pkgTitle.slice(0, 65)} | Ref: ${refNo}`, margin, 9);
+      doc.text("CONFIDENTIAL - CONTRACT EVALUATION CELL", pageWidth - margin, 9, { align: "right" });
+      doc.setDrawColor(...borderGray);
+      doc.setLineWidth(0.3);
+      doc.line(margin, 10.5, pageWidth - margin, 10.5);
+    }
+
+    doc.setDrawColor(...borderGray);
+    doc.setLineWidth(0.3);
+    doc.line(margin, pageHeight - 11, pageWidth - margin, pageHeight - 11);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.2);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Public Sector Procurement Compliance • Rule 173 GFR 2017 & CVC Guidelines", margin, pageHeight - 7);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 7, { align: "right" });
+  }
+
+  const filename = `Comprehensive_Tender_Evaluation_${refNo.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`;
+  doc.save(filename);
+}
+
+/**
  * Generates and downloads Word (.docx) for Reviewed / Harmonized Clauses
  */
 export async function exportReviewedClausesToWord(
@@ -2080,18 +2782,18 @@ export function exportServiceEvaluationToExcel(
     [formatTitle ? `FORMAT TEMPLATE: ${formatTitle}` : "FORMAT: Standard GFR 2017 & Open Tender Matrix"],
     [""],
     ["A. NIT ELIGIBILITY CRITERIA BENCHMARKS:"],
-    ["1. Financial Turnover Benchmark", `Minimum Average Annual Turnover of Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr in last 3 FYs with CA UDIN`],
-    ["2. Experience Threshold (Single Work)", `At least 1 similar work >= Rs. ${(criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2)} Cr`],
-    ["3. Experience Threshold (Two Works)", `At least 2 similar works >= Rs. ${(criteria.twoWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.5).toFixed(2)} Cr each`],
-    ["4. Experience Threshold (Three Works)", `At least 3 similar works >= Rs. ${(criteria.threeWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.4).toFixed(2)} Cr each`],
-    ["5. Similar Work Definition", criteria.similarWorkDefinition],
+    ["1. Financial Turnover Benchmark", `Minimum Average Annual Turnover of Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr in last 3 FYs with CA UDIN`],
+    ["2. Experience Threshold (Single Work)", `At least 1 similar work >= Rs. ${(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr`],
+    ["3. Experience Threshold (Two Works)", `At least 2 similar works >= Rs. ${(criteria?.twoWorkOrdersValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.5).toFixed(2)} Cr each`],
+    ["4. Experience Threshold (Three Works)", `At least 3 similar works >= Rs. ${(criteria?.threeWorkOrdersValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.4).toFixed(2)} Cr each`],
+    ["5. Similar Work Definition", criteria?.similarWorkDefinition || "N/A"],
     [""],
     ["B. BIDDER QUALIFICATION SUMMARY:"],
     ["Total Bidders Evaluated", bidders.length],
     ["Techno-Commercially Qualified (Ready for Price Bid)", bidders.filter((b) => b.overallStatus === "RESPONSIVE_QUALIFIED").length],
     ["Shortfall / Clarification Required", bidders.filter((b) => b.overallStatus === "SHORTFALL_REQUIRED").length],
     ["Disqualified / Rejected", bidders.filter((b) => b.overallStatus === "REJECTED_DISQUALIFIED").length],
-    ["Banning / Debarment Alerts Flagged", bidders.filter((b) => b.banningStatusAlert.isAlertTriggered).length],
+    ["Banning / Debarment Alerts Flagged", bidders.filter((b) => b.banningStatusAlert?.isAlertTriggered).length],
   ];
 
   const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
@@ -2120,31 +2822,31 @@ export function exportServiceEvaluationToExcel(
   ];
 
   const comparativeRows = bidders.map((b, idx) => {
-    const turnovers = b.financialEvaluation.claimedTurnoverByYear || [];
-    const works = b.experienceEvaluation.submittedWorks || [];
+    const turnovers = b.financialEvaluation?.claimedTurnoverByYear || [];
+    const works = b.experienceEvaluation?.submittedWorks || [];
     const maxWorkVal = works.reduce((max, w) => Math.max(max, w.contractValueCr || 0), 0);
     const scopeMatch = works.some((w) => w.matchesSimilarWorkScope);
     const certAttached = works.some((w) => w.completionCertificateAttached);
     const bundlesStr = (b.uploadedBundles || []).map((bun) => `${bun.bundleName} (${bun.totalFilesExtracted} files)`).join("; ") ||
-      `${b.turnoverDocuments.length + b.experienceDocuments.length} files`;
+      `${(b.turnoverDocuments?.length || 0) + (b.experienceDocuments?.length || 0)} files`;
 
     return [
       idx + 1,
       b.bidderName,
       b.overallStatus,
-      b.banningStatusAlert.isAlertTriggered ? `ALERT: ${b.banningStatusAlert.reason}` : "CLEAN",
-      b.financialEvaluation.averageTurnoverCr.toFixed(2),
-      criteria.minAverageAnnualTurnoverCr.toFixed(2),
-      b.financialEvaluation.status,
-      turnovers[0]?.turnoverCr ? turnovers[0].turnoverCr.toFixed(2) : "N/A",
-      turnovers[1]?.turnoverCr ? turnovers[1].turnoverCr.toFixed(2) : "N/A",
-      turnovers[2]?.turnoverCr ? turnovers[2].turnoverCr.toFixed(2) : "N/A",
+      b.banningStatusAlert?.isAlertTriggered ? `ALERT: ${b.banningStatusAlert.reason}` : "CLEAN",
+      (b.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2),
+      (criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2),
+      b.financialEvaluation?.status || "PENDING",
+      turnovers[0]?.turnoverCr !== undefined ? turnovers[0].turnoverCr.toFixed(2) : "N/A",
+      turnovers[1]?.turnoverCr !== undefined ? turnovers[1].turnoverCr.toFixed(2) : "N/A",
+      turnovers[2]?.turnoverCr !== undefined ? turnovers[2].turnoverCr.toFixed(2) : "N/A",
       turnovers.some((t) => t.caUdinPresent) ? "YES" : "MISSING",
-      b.experienceEvaluation.status,
+      b.experienceEvaluation?.status || "PENDING",
       maxWorkVal > 0 ? maxWorkVal.toFixed(2) : "0.00",
       scopeMatch ? "YES" : "NO",
       certAttached ? "YES" : "NO",
-      [...b.financialEvaluation.reasons, ...b.experienceEvaluation.reasons].join(" | "),
+      [...(b.financialEvaluation?.reasons || []), ...(b.experienceEvaluation?.reasons || [])].join(" | "),
       b.summaryReason,
       bundlesStr,
     ];
@@ -2272,22 +2974,22 @@ export async function exportServiceEvaluationToDocx(
   ];
 
   bidders.forEach((b, idx) => {
-    const works = b.experienceEvaluation.submittedWorks || [];
+    const works = b.experienceEvaluation?.submittedWorks || [];
     const maxWorkVal = works.reduce((max, w) => Math.max(max, w.contractValueCr || 0), 0);
     const scopeMatch = works.some((w) => w.matchesSimilarWorkScope) ? "Complied" : "Deviated";
-    const udinStatus = (b.financialEvaluation.claimedTurnoverByYear || []).some((t) => t.caUdinPresent) ? "Valid" : "Deficient";
+    const udinStatus = (b.financialEvaluation?.claimedTurnoverByYear || []).some((t) => t.caUdinPresent) ? "Valid" : "Deficient";
 
     evalRows.push(
       new TableRow({
         children: [
           tableBodyCell(String(idx + 1), false, AlignmentType.CENTER),
           tableBodyCell(b.bidderName, true),
-          tableBodyCell(`Rs. ${b.financialEvaluation.averageTurnoverCr.toFixed(2)} Cr`, false, AlignmentType.RIGHT),
+          tableBodyCell(`Rs. ${(b.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2)} Cr`, false, AlignmentType.RIGHT),
           tableBodyCell(udinStatus, false, AlignmentType.CENTER),
           tableBodyCell(`Rs. ${maxWorkVal.toFixed(2)} Cr`, false, AlignmentType.RIGHT),
           tableBodyCell(scopeMatch, false, AlignmentType.CENTER),
-          tableBodyCell(b.overallStatus.replace("_", " "), true),
-          tableBodyCell(b.summaryReason),
+          tableBodyCell((b.overallStatus || "PENDING").replace("_", " "), true),
+          tableBodyCell(b.summaryReason || "Scrutinized"),
         ],
       })
     );
@@ -2337,14 +3039,14 @@ export async function exportServiceEvaluationToDocx(
             children: [
               new TextRun({ text: "• Financial Criteria: ", bold: true }),
               new TextRun({
-                text: `Minimum Average Annual Turnover of Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Crores during the last 3 financial years duly certified by a Chartered Accountant with valid Unique Document Identification Number (UDIN).\n`,
+                text: `Minimum Average Annual Turnover of Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Crores during the last 3 financial years duly certified by a Chartered Accountant with valid Unique Document Identification Number (UDIN).\n`,
               }),
               new TextRun({ text: "• Technical Experience: ", bold: true }),
               new TextRun({
-                text: `Execution of completed similar service works during qualifying period satisfying Single Work >= Rs. ${(criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2)} Cr, or Two Works >= Rs. ${(criteria.twoWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.5).toFixed(2)} Cr each, or Three Works >= Rs. ${(criteria.threeWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.4).toFixed(2)} Cr each.\n`,
+                text: `Execution of completed similar service works during qualifying period satisfying Single Work >= Rs. ${(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr, or Two Works >= Rs. ${(criteria?.twoWorkOrdersValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.5).toFixed(2)} Cr each, or Three Works >= Rs. ${(criteria?.threeWorkOrdersValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.4).toFixed(2)} Cr each.\n`,
               }),
               new TextRun({ text: "• Similar Work Definition: ", bold: true }),
-              new TextRun({ text: `"${criteria.similarWorkDefinition}"\n` }),
+              new TextRun({ text: `"${criteria?.similarWorkDefinition || "Similar Works"}"\n` }),
             ],
             spacing: { after: 200 },
           }),
@@ -2397,19 +3099,19 @@ export function generateServiceEvaluationCustomText(
   const dateStr = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
 
   const qualifiedList = bidders.filter((b) => b.overallStatus === "RESPONSIVE_QUALIFIED").map((b) => b.bidderName).join(", ") || "None";
-  const shortfallList = bidders.filter((b) => b.overallStatus === "SHORTFALL_REQUIRED").map((b) => `${b.bidderName} (Deficiency: ${[...b.financialEvaluation.reasons, ...b.experienceEvaluation.reasons].join("; ")})`).join("\n  • ") || "None";
-  const rejectedList = bidders.filter((b) => b.overallStatus === "REJECTED_DISQUALIFIED").map((b) => `${b.bidderName} (Grounds: ${[...b.financialEvaluation.reasons, ...b.experienceEvaluation.reasons].join("; ")})`).join("\n  • ") || "None";
+  const shortfallList = bidders.filter((b) => b.overallStatus === "SHORTFALL_REQUIRED").map((b) => `${b.bidderName} (Deficiency: ${[...(b.financialEvaluation?.reasons || []), ...(b.experienceEvaluation?.reasons || [])].join("; ")})`).join("\n  • ") || "None";
+  const rejectedList = bidders.filter((b) => b.overallStatus === "REJECTED_DISQUALIFIED").map((b) => `${b.bidderName} (Grounds: ${[...(b.financialEvaluation?.reasons || []), ...(b.experienceEvaluation?.reasons || [])].join("; ")})`).join("\n  • ") || "None";
 
   // Build comparative table string
   let tableStr = `| Sl | Bidder Name | Overall Status | Claimed Avg Turnover | Required Turnover | UDIN | Max Work Value | Scope Match | Recommendation |\n`;
   tableStr += `|:---|:---|:---|:---|:---|:---|:---|:---|:---|\n`;
   bidders.forEach((b, idx) => {
-    const works = b.experienceEvaluation.submittedWorks || [];
+    const works = b.experienceEvaluation?.submittedWorks || [];
     const maxWorkVal = works.reduce((max, w) => Math.max(max, w.contractValueCr || 0), 0);
     const scopeMatch = works.some((w) => w.matchesSimilarWorkScope) ? "Complied" : "Deviated";
-    const udinStatus = (b.financialEvaluation.claimedTurnoverByYear || []).some((t) => t.caUdinPresent) ? "Valid" : "Missing";
+    const udinStatus = (b.financialEvaluation?.claimedTurnoverByYear || []).some((t) => t.caUdinPresent) ? "Valid" : "Missing";
 
-    tableStr += `| ${idx + 1} | ${b.bidderName} | ${b.overallStatus} | Rs. ${b.financialEvaluation.averageTurnoverCr.toFixed(2)} Cr | Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr | ${udinStatus} | Rs. ${maxWorkVal.toFixed(2)} Cr | ${scopeMatch} | ${b.summaryReason} |\n`;
+    tableStr += `| ${idx + 1} | ${b.bidderName} | ${b.overallStatus} | Rs. ${(b.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2)} Cr | Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr | ${udinStatus} | Rs. ${maxWorkVal.toFixed(2)} Cr | ${scopeMatch} | ${b.summaryReason} |\n`;
   });
 
   if (templateText && templateText.trim().length > 50) {
@@ -2419,8 +3121,8 @@ export function generateServiceEvaluationCustomText(
     populated = populated.replace(/\[REF_NO\]/gi, refNo);
     populated = populated.replace(/\[DATE\]/gi, dateStr);
     populated = populated.replace(/\[EVALUATION_DATE\]/gi, dateStr);
-    populated = populated.replace(/\[MIN_TURNOVER\]/gi, `Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr`);
-    populated = populated.replace(/\[SIMILAR_WORK\]/gi, criteria.similarWorkDefinition);
+    populated = populated.replace(/\[MIN_TURNOVER\]/gi, `Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr`);
+    populated = populated.replace(/\[SIMILAR_WORK\]/gi, criteria?.similarWorkDefinition || "Similar Works");
     populated = populated.replace(/\[QUALIFIED_BIDDERS\]/gi, qualifiedList);
     populated = populated.replace(/\[SHORTFALL_BIDDERS\]/gi, shortfallList);
     populated = populated.replace(/\[DISQUALIFIED_BIDDERS\]/gi, rejectedList);
@@ -2440,12 +3142,12 @@ TENDER REFERENCE: ${refNo} | DATE: ${dateStr}
 REGULATORY BENCHMARK: General Financial Rules (GFR) 2017 Rule 173 & CVC Manual
 
 1. NIT QUALIFYING CRITERIA SPECIFICATION:
-- Minimum Average Annual Turnover: Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Crores (last 3 FYs with CA UDIN)
+- Minimum Average Annual Turnover: Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Crores (last 3 FYs with CA UDIN)
 - Technical Experience (Completed Similar Works Threshold):
-  * Single Work >= Rs. ${(criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2)} Cr
-  * Two Works >= Rs. ${(criteria.twoWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.5).toFixed(2)} Cr each
-  * Three Works >= Rs. ${(criteria.threeWorkOrdersValueCr || criteria.minAverageAnnualTurnoverCr * 0.4).toFixed(2)} Cr each
-- Similar Work Scope Definition: "${criteria.similarWorkDefinition}"
+  * Single Work >= Rs. ${(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr
+  * Two Works >= Rs. ${(criteria?.twoWorkOrdersValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.5).toFixed(2)} Cr each
+  * Three Works >= Rs. ${(criteria?.threeWorkOrdersValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.4).toFixed(2)} Cr each
+- Similar Work Scope Definition: "${criteria?.similarWorkDefinition || "Similar Works"}"
 
 2. CONSOLIDATED COMPARATIVE EVALUATION MATRIX:
 ${tableStr}

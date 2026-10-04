@@ -1,13 +1,17 @@
 import JSZip from "jszip";
 import * as pdfjsLib from "pdfjs-dist";
+import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import * as XLSX from "xlsx";
 import mammoth from "mammoth";
 import { performBrowserImageOcr } from "./ocrAndTamperAnalyzer";
 
-// Set pdfjs worker source if not set
-if (typeof window !== "undefined" && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-  // Use local or unpkg worker URL or leave fallback for canvas
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || "3.11.174"}/pdf.worker.min.js`;
+// Set pdfjs worker source to local bundled worker
+if (typeof window !== "undefined") {
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+  } catch (err) {
+    console.warn("Could not set local pdfjs workerSrc:", err);
+  }
 }
 
 export interface ExtractedSubDocument {
@@ -114,11 +118,35 @@ export async function extractTextFromPdfData(arrayBuffer: ArrayBuffer, fileName:
       try {
         const page = await pdfDoc.getPage(i);
         const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          .map((item: any) => item.str || "")
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim();
+        let lastY: number | null = null;
+        const lineParts: string[] = [];
+        let currentLine = "";
+
+        for (const item of textContent.items as any[]) {
+          const str = item.str || "";
+          if (!str && !item.hasEOL) continue;
+          const currentY = item.transform ? item.transform[5] : null;
+
+          const isNewline =
+            item.hasEOL ||
+            (lastY !== null && currentY !== null && Math.abs(currentY - lastY) > 3.5);
+
+          if (isNewline && currentLine.trim()) {
+            lineParts.push(currentLine.trim());
+            currentLine = str;
+          } else {
+            const spaceNeeded = currentLine.length > 0 && !currentLine.endsWith(" ") && !str.startsWith(" ");
+            currentLine += (spaceNeeded ? " " : "") + str;
+          }
+
+          if (currentY !== null) lastY = currentY;
+        }
+
+        if (currentLine.trim()) {
+          lineParts.push(currentLine.trim());
+        }
+
+        const pageText = lineParts.join("\n").trim();
         pagesText.push({ pageNum: i, text: pageText });
         if (pageText) {
           fullTextParts.push(`--- Page ${i} ---\n${pageText}`);
@@ -589,13 +617,21 @@ export function extractEligibilityCriteriaFromText(
   });
 
   // Targeted parsing for TURNOVER fields
-  // Check for turnover value: e.g. "turnover of Rs. 15.5 Cr" or "15.5 Crore" or "₹ 15 Cr" or "Rs 1500 Lakhs"
-  const turnoverRegex = /(?:turnover|annual turnover|average annual turnover)[^.\n]{0,90}?(?:(?:INR|Rs\.?|₹)\s*)?([0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?)/i;
+  // Check for turnover value: e.g. "turnover of Rs. 15.5 Cr" or "15.5 Crore" or "₹ 15 Cr" or "Rs 1,500 Lakhs" or "Rs 15,00,00,000"
+  const turnoverRegex = /(?:turnover|annual turnover|average annual turnover)[^.\n]{0,90}?(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|crore)?/i;
   const turnoverMatch = text.match(turnoverRegex);
-  if (turnoverMatch) {
-    const val = parseFloat(turnoverMatch[1]);
-    const unit = turnoverMatch[2]?.toLowerCase() || "cr";
-    const finalValCr = unit.startsWith("lakh") ? parseFloat((val / 100).toFixed(2)) : val;
+  if (turnoverMatch && turnoverMatch[1]) {
+    const rawNum = turnoverMatch[1].replace(/[^\d.]/g, "");
+    const val = parseFloat(rawNum);
+    const unit = turnoverMatch[2]?.toLowerCase() || "";
+    let finalValCr = val;
+    if (unit.startsWith("lakh") || unit.startsWith("lac")) {
+      finalValCr = parseFloat((val / 100).toFixed(2));
+    } else if (val >= 10000000) {
+      finalValCr = parseFloat((val / 10000000).toFixed(2));
+    } else {
+      finalValCr = parseFloat(val.toFixed(2));
+    }
     if (finalValCr > 0) {
       suggestedCriteria.minAverageAnnualTurnoverCr = finalValCr;
       summaryFindings.push(`Found Minimum Turnover requirement: ₹ ${finalValCr} Crore (${turnoverMatch[0].trim()})`);
@@ -640,34 +676,43 @@ export function extractEligibilityCriteriaFromText(
     }
   }
 
-  // Check for 80% / 50% / 40% work order values or specific Cr amounts
-  const singleWorkMatch = text.match(/(?:one|1|single)\s+(?:completed\s+)?(?:similar\s+)?work(?:\s+order)?(?:\s+costing|\s+valued\s+at|\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?)/i);
-  if (singleWorkMatch) {
-    const val = parseFloat(singleWorkMatch[1]);
-    const unit = singleWorkMatch[2]?.toLowerCase() || "cr";
-    const finalVal = unit.startsWith("lakh") ? parseFloat((val / 100).toFixed(2)) : val;
+  // Check for 80% / 50% / 40% work order values or specific Cr amounts (with comma numbers)
+  const singleWorkMatch = text.match(/(?:one|1|single)\s+(?:completed\s+)?(?:similar\s+)?work(?:\s+order)?(?:\s+costing|\s+valued\s+at|\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|crore)?/i);
+  if (singleWorkMatch && singleWorkMatch[1]) {
+    const rawNum = singleWorkMatch[1].replace(/[^\d.]/g, "");
+    const val = parseFloat(rawNum);
+    const unit = singleWorkMatch[2]?.toLowerCase() || "";
+    let finalVal = val;
+    if (unit.startsWith("lakh") || unit.startsWith("lac")) finalVal = parseFloat((val / 100).toFixed(2));
+    else if (val >= 10000000) finalVal = parseFloat((val / 10000000).toFixed(2));
     if (finalVal > 0) suggestedCriteria.singleWorkOrderValueCr = finalVal;
   } else if (suggestedCriteria.minAverageAnnualTurnoverCr > 0) {
     // GFR / PSU standard benchmark: Single work order 80% of estimate / turnover
     suggestedCriteria.singleWorkOrderValueCr = parseFloat((suggestedCriteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2));
   }
 
-  const twoWorksMatch = text.match(/(?:two|2)\s+(?:completed\s+)?(?:similar\s+)?works?(?:\s+orders?)?(?:\s+costing|\s+valued\s+at|\s+each\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?)/i);
-  if (twoWorksMatch) {
-    const val = parseFloat(twoWorksMatch[1]);
-    const unit = twoWorksMatch[2]?.toLowerCase() || "cr";
-    const finalVal = unit.startsWith("lakh") ? parseFloat((val / 100).toFixed(2)) : val;
+  const twoWorksMatch = text.match(/(?:two|2)\s+(?:completed\s+)?(?:similar\s+)?works?(?:\s+orders?)?(?:\s+costing|\s+valued\s+at|\s+each\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|crore)?/i);
+  if (twoWorksMatch && twoWorksMatch[1]) {
+    const rawNum = twoWorksMatch[1].replace(/[^\d.]/g, "");
+    const val = parseFloat(rawNum);
+    const unit = twoWorksMatch[2]?.toLowerCase() || "";
+    let finalVal = val;
+    if (unit.startsWith("lakh") || unit.startsWith("lac")) finalVal = parseFloat((val / 100).toFixed(2));
+    else if (val >= 10000000) finalVal = parseFloat((val / 10000000).toFixed(2));
     if (finalVal > 0) suggestedCriteria.twoWorkOrdersValueCr = finalVal;
   } else if (suggestedCriteria.minAverageAnnualTurnoverCr > 0) {
     // 50% threshold
     suggestedCriteria.twoWorkOrdersValueCr = parseFloat((suggestedCriteria.minAverageAnnualTurnoverCr * 0.5).toFixed(2));
   }
 
-  const threeWorksMatch = text.match(/(?:three|3)\s+(?:completed\s+)?(?:similar\s+)?works?(?:\s+orders?)?(?:\s+costing|\s+valued\s+at|\s+each\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?)/i);
-  if (threeWorksMatch) {
-    const val = parseFloat(threeWorksMatch[1]);
-    const unit = threeWorksMatch[2]?.toLowerCase() || "cr";
-    const finalVal = unit.startsWith("lakh") ? parseFloat((val / 100).toFixed(2)) : val;
+  const threeWorksMatch = text.match(/(?:three|3)\s+(?:completed\s+)?(?:similar\s+)?works?(?:\s+orders?)?(?:\s+costing|\s+valued\s+at|\s+each\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|crore)?/i);
+  if (threeWorksMatch && threeWorksMatch[1]) {
+    const rawNum = threeWorksMatch[1].replace(/[^\d.]/g, "");
+    const val = parseFloat(rawNum);
+    const unit = threeWorksMatch[2]?.toLowerCase() || "";
+    let finalVal = val;
+    if (unit.startsWith("lakh") || unit.startsWith("lac")) finalVal = parseFloat((val / 100).toFixed(2));
+    else if (val >= 10000000) finalVal = parseFloat((val / 10000000).toFixed(2));
     if (finalVal > 0) suggestedCriteria.threeWorkOrdersValueCr = finalVal;
   } else if (suggestedCriteria.minAverageAnnualTurnoverCr > 0) {
     // 40% threshold

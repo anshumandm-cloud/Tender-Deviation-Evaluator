@@ -29,6 +29,8 @@ import {
   Copy,
   Check,
   FileCode,
+  Edit3,
+  Calculator,
 } from "lucide-react";
 import {
   ServiceCriteriaRequirement,
@@ -39,7 +41,7 @@ import {
   BlacklistedEntity,
 } from "../types/serviceEvaluation";
 import { TenderMetadata, UploadedFormatTemplate } from "../types";
-import { parseUploadedFile } from "../utils/fileParser";
+import { parseUploadedFile, categorizeDocument } from "../utils/fileParser";
 import { evaluateBidderEligibility } from "../utils/serviceEvaluationEngine";
 import {
   triggerFileDownload,
@@ -126,6 +128,33 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
   const [newRefOrder, setNewRefOrder] = useState<string>("");
   const [newReason, setNewReason] = useState<string>("");
   const [newPortalUrl, setNewPortalUrl] = useState<string>("https://");
+
+  // Turnover manual verification / adjustment modal state
+  const [isTurnoverModalOpen, setIsTurnoverModalOpen] = useState<boolean>(false);
+  const [editingTurnoverBidderId, setEditingTurnoverBidderId] = useState<string | null>(null);
+  const [editableTurnoverRows, setEditableTurnoverRows] = useState<{
+    year: string;
+    turnoverCr: number;
+    auditedVerified: boolean;
+    caUdinPresent: boolean;
+  }[]>([]);
+  const [editableUdinInput, setEditableUdinInput] = useState<string>("");
+
+  // Experience manual verification / adjustment modal state
+  const [isExperienceModalOpen, setIsExperienceModalOpen] = useState<boolean>(false);
+  const [editingExpBidderId, setEditingExpBidderId] = useState<string | null>(null);
+  const [editableWorks, setEditableWorks] = useState<{
+    workTitle: string;
+    clientName: string;
+    contractValueCr: number;
+    completionDate: string;
+    matchesSimilarWorkScope: boolean;
+    completionCertificateAttached: boolean;
+    satisfactoryPerformanceReportAttached: boolean;
+    remarks?: string;
+  }[]>([]);
+
+  const [dossierModalError, setDossierModalError] = useState<string | null>(null);
 
   const activeBidder = bidders.find((b) => b.bidderId === selectedBidderId) || bidders[0];
 
@@ -225,6 +254,199 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
     );
   };
 
+  // Open and initialize Turnover Edit Modal
+  const handleOpenTurnoverModal = (bidder: BidderServiceSubmission) => {
+    setEditingTurnoverBidderId(bidder.bidderId);
+    const existing = bidder.financialEvaluation?.claimedTurnoverByYear || [];
+    if (existing.length > 0) {
+      setEditableTurnoverRows(existing.map((r) => ({ ...r })));
+    } else {
+      setEditableTurnoverRows([
+        { year: "FY 2022-23", turnoverCr: 0, auditedVerified: true, caUdinPresent: false },
+        { year: "FY 2023-24", turnoverCr: 0, auditedVerified: true, caUdinPresent: false },
+        { year: "FY 2024-25", turnoverCr: 0, auditedVerified: true, caUdinPresent: false },
+      ]);
+    }
+    const detectedUdin =
+      bidder.financialEvaluation?.reasons?.find((r) => r.includes("UDIN:"))?.match(/UDIN:\s*([0-9A-Z]{18})/i)?.[1] || "";
+    setEditableUdinInput(detectedUdin);
+    setIsTurnoverModalOpen(true);
+  };
+
+  // Save changes from Turnover Edit Modal and re-evaluate
+  const handleSaveTurnoverModal = () => {
+    if (!editingTurnoverBidderId) return;
+    const targetBidder = bidders.find((b) => b.bidderId === editingTurnoverBidderId);
+    if (!targetBidder) return;
+
+    const validRows = editableTurnoverRows.filter((r) => r.year.trim().length > 0);
+    const sum = validRows.reduce((acc, r) => acc + (Number(r.turnoverCr) || 0), 0);
+    const avg = validRows.length > 0 ? parseFloat((sum / validRows.length).toFixed(2)) : 0;
+    const hasUdin = Boolean(editableUdinInput.trim().length >= 10 || validRows.some((r) => r.caUdinPresent));
+
+    const updatedRows = validRows.map((r) => ({
+      ...r,
+      turnoverCr: Number(r.turnoverCr) || 0,
+      caUdinPresent: hasUdin,
+    }));
+
+    const isQualified = avg >= criteria.minAverageAnnualTurnoverCr && hasUdin && avg > 0;
+    const isShortfall = avg >= criteria.minAverageAnnualTurnoverCr && !hasUdin && avg > 0;
+
+    const reasons: string[] = [];
+    if (avg === 0) {
+      reasons.push("No turnover figures specified or validated.");
+    } else if (avg >= criteria.minAverageAnnualTurnoverCr) {
+      reasons.push(`Average Annual Turnover of Rs. ${avg.toFixed(2)} Cr meets required threshold of Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr.`);
+    } else {
+      reasons.push(`Average Annual Turnover of Rs. ${avg.toFixed(2)} Cr falls short of required Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr.`);
+    }
+
+    if (hasUdin) {
+      reasons.push(editableUdinInput ? `CA Certificate verified with valid UDIN: ${editableUdinInput.trim()}.` : "Chartered Accountant (CA) UDIN verified on documentation.");
+    } else if (avg > 0) {
+      reasons.push("Chartered Accountant (CA) UDIN is not visible or authenticated on the submitted turnover certificate.");
+    }
+
+    const updatedBidder: BidderServiceSubmission = {
+      ...targetBidder,
+      financialEvaluation: {
+        ...targetBidder.financialEvaluation,
+        claimedTurnoverByYear: updatedRows,
+        averageTurnoverCr: avg,
+        status: isQualified ? "QUALIFIED" : isShortfall ? "SHORTFALL" : "REJECTED",
+        reasons,
+      },
+    };
+
+    const fullyEvaluated = evaluateBidderEligibility(
+      updatedBidder,
+      criteria,
+      metadata.packageTitle,
+      metadata.tenderRefNo,
+      evaluationStage === "ROUND_2_SHORTFALL_EVAL",
+      blacklistDatabase,
+      { preserveManualData: true }
+    );
+
+    setBidders((prev) => prev.map((b) => (b.bidderId === editingTurnoverBidderId ? fullyEvaluated : b)));
+    setIsTurnoverModalOpen(false);
+
+    setUploadFeedback({
+      type: "success",
+      message: `Updated turnover evaluation for ${targetBidder.bidderName}: Average Rs. ${avg.toFixed(2)} Cr (${isQualified ? "QUALIFIED" : isShortfall ? "SHORTFALL" : "REJECTED"}).`,
+    });
+    setTimeout(() => setUploadFeedback(null), 5000);
+
+    onLogAudit?.(
+      "Verified & Adjusted Turnover Figures",
+      "Bidders & Deviations",
+      `Dealing Officer manually verified and updated turnover for ${targetBidder.bidderName}: Rs. ${avg.toFixed(2)} Cr`,
+      `Years: ${updatedRows.map((r) => `${r.year}: Rs. ${r.turnoverCr} Cr`).join(", ")} | UDIN: ${editableUdinInput || "None"}`,
+      `Bidder: ${targetBidder.bidderName}`,
+      "Financial Eligibility Scrutiny"
+    );
+  };
+
+  // Open and initialize Experience Edit Modal
+  const handleOpenExperienceModal = (bidder: BidderServiceSubmission) => {
+    setEditingExpBidderId(bidder.bidderId);
+    const existing = bidder.experienceEvaluation?.submittedWorks || [];
+    if (existing.length > 0) {
+      setEditableWorks(existing.map((w) => ({ ...w })));
+    } else {
+      setEditableWorks([
+        {
+          workTitle: "Comprehensive Facility, Electro-Mechanical & Utilities O&M",
+          clientName: "Central / State Infrastructure Agency",
+          contractValueCr: criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8,
+          completionDate: "31-03-2024",
+          matchesSimilarWorkScope: true,
+          completionCertificateAttached: true,
+          satisfactoryPerformanceReportAttached: true,
+          remarks: "Verified against submitted Work Order & Client Certificate",
+        },
+      ]);
+    }
+    setIsExperienceModalOpen(true);
+  };
+
+  // Save changes from Experience Edit Modal and re-evaluate
+  const handleSaveExperienceModal = () => {
+    if (!editingExpBidderId) return;
+    const targetBidder = bidders.find((b) => b.bidderId === editingExpBidderId);
+    if (!targetBidder) return;
+
+    const minRequiredWorkValue = criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8;
+    const highestWorkValue = editableWorks.length > 0 ? (editableWorks[0].contractValueCr || 0) : 0;
+    const scopeMatches = editableWorks.length > 0 ? Boolean(editableWorks[0].matchesSimilarWorkScope) : false;
+    const certAttached = editableWorks.length > 0 ? Boolean(editableWorks[0].completionCertificateAttached) : false;
+
+    const reasons: string[] = [];
+    let expStatus: "QUALIFIED" | "SHORTFALL" | "REJECTED" = "QUALIFIED";
+
+    if (editableWorks.length === 0) {
+      expStatus = "SHORTFALL";
+      reasons.push("No technical experience or work order records submitted.");
+    } else if (highestWorkValue >= minRequiredWorkValue && scopeMatches && certAttached) {
+      expStatus = "QUALIFIED";
+      reasons.push(`Submitted work of value Rs. ${highestWorkValue.toFixed(2)} Cr satisfies technical eligibility requirement (Threshold: Rs. ${minRequiredWorkValue.toFixed(2)} Cr).`);
+      reasons.push("Scope of work executed aligns with tendered 'Similar Work' definition.");
+      reasons.push("Valid Completion Certificate and Satisfactory Performance Report submitted.");
+    } else if (highestWorkValue >= minRequiredWorkValue && scopeMatches && !certAttached) {
+      expStatus = "SHORTFALL";
+      reasons.push(`Work order value of Rs. ${highestWorkValue.toFixed(2)} Cr meets threshold, but formal Final Completion Certificate signed by client authority is not attached.`);
+      reasons.push("Eligible for Shortfall clarification as per OT guidelines since base work order was submitted before tender opening.");
+    } else {
+      expStatus = "REJECTED";
+      if (!scopeMatches) {
+        reasons.push("Submitted experience scope does not meet tendered 'Similar Work' definition specified in NIT Clause 3.2.");
+      }
+      if (highestWorkValue < minRequiredWorkValue) {
+        reasons.push(`Executed work value of Rs. ${highestWorkValue.toFixed(2)} Cr is below minimum mandatory requirement of Rs. ${minRequiredWorkValue.toFixed(2)} Cr.`);
+      }
+      reasons.push("Per Open Tender guidelines, no shortfall can be permitted to introduce new work orders post-bid opening.");
+    }
+
+    const updatedBidder: BidderServiceSubmission = {
+      ...targetBidder,
+      experienceEvaluation: {
+        ...targetBidder.experienceEvaluation,
+        submittedWorks: editableWorks,
+        status: expStatus,
+        reasons,
+      },
+    };
+
+    const fullyEvaluated = evaluateBidderEligibility(
+      updatedBidder,
+      criteria,
+      metadata.packageTitle,
+      metadata.tenderRefNo,
+      evaluationStage === "ROUND_2_SHORTFALL_EVAL",
+      blacklistDatabase,
+      { preserveManualData: true }
+    );
+
+    setBidders((prev) => prev.map((b) => (b.bidderId === editingExpBidderId ? fullyEvaluated : b)));
+    setIsExperienceModalOpen(false);
+
+    setUploadFeedback({
+      type: "success",
+      message: `Updated technical experience evaluation for ${targetBidder.bidderName} (${expStatus}).`,
+    });
+    setTimeout(() => setUploadFeedback(null), 5000);
+
+    onLogAudit?.(
+      "Verified & Adjusted Experience Records",
+      "Bidders & Deviations",
+      `Dealing Officer manually verified and updated experience for ${targetBidder.bidderName}: ${editableWorks.length} work(s), Highest: Rs. ${highestWorkValue.toFixed(2)} Cr`,
+      `Status: ${expStatus}`,
+      `Bidder: ${targetBidder.bidderName}`,
+      "Technical Eligibility Scrutiny"
+    );
+  };
+
   // Upload document or complete dossier (Single ZIP, Single PDF, or multiple files)
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -281,7 +503,7 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
         } else {
           // Standard single file (PDF, DOCX, XLSX, TXT, image)
           totalFilesExtracted++;
-          const effCat = category === "bundle" ? (parsed.isOcrScanned ? "experience" : "turnover") : category;
+          const effCat = category === "bundle" ? categorizeDocument(file.name, parsed.text) : category;
           const docObj: BidderSubmittedDocument = {
             id: `doc-${Date.now()}-${i}`,
             name: file.name,
@@ -435,9 +657,9 @@ Date: ${new Date().toLocaleDateString("en-IN")}
 --------------------------------------------------------------------------------
 
 A. QUALIFYING CRITERIA SPECIFIED IN NIT:
-1. Financial Turnover: Minimum Average Annual Turnover of Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr in last 3 financial years with valid CA UDIN.
-2. Experience Criteria: Completed Similar Work (Threshold: Single work >= Rs. ${(criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2)} Cr).
-3. Similar Work Scope: ${criteria.similarWorkDefinition}
+1. Financial Turnover: Minimum Average Annual Turnover of Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr in last 3 financial years with valid CA UDIN.
+2. Experience Criteria: Completed Similar Work (Threshold: Single work >= Rs. ${(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr).
+3. Similar Work Scope: ${criteria?.similarWorkDefinition || "Similar Works"}
 
 B. SUMMARY OF BIDDER SCRUTINY:
 `;
@@ -446,11 +668,11 @@ B. SUMMARY OF BIDDER SCRUTINY:
       reportContent += `
 [${idx + 1}] BIDDER: ${b.bidderName}
     • Overall Status: ${b.overallStatus}
-    • Banning & Debarment Status: ${b.banningStatusAlert.isAlertTriggered ? `FLAGGED / UNDER SCRUTINY (${b.banningStatusAlert.reason})` : "CLEAN (Verified against CPPP/GeM/CVC/Internal registers)"}
-    • Financial Turnover Status: ${b.financialEvaluation.status} (Average: Rs. ${b.financialEvaluation.averageTurnoverCr} Cr)
-      - Grounds: ${b.financialEvaluation.reasons.join(" | ")}
-    • Experience Criteria Status: ${b.experienceEvaluation.status}
-      - Grounds: ${b.experienceEvaluation.reasons.join(" | ")}
+    • Banning & Debarment Status: ${b.banningStatusAlert?.isAlertTriggered ? `FLAGGED / UNDER SCRUTINY (${b.banningStatusAlert?.reason || "Debarment Notice"})` : "CLEAN (Verified against CPPP/GeM/CVC/Internal registers)"}
+    • Financial Turnover Status: ${b.financialEvaluation?.status || "PENDING"} (Average: Rs. ${(b.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2)} Cr)
+      - Grounds: ${(b.financialEvaluation?.reasons || []).join(" | ")}
+    • Experience Criteria Status: ${b.experienceEvaluation?.status || "PENDING"}
+      - Grounds: ${(b.experienceEvaluation?.reasons || []).join(" | ")}
     • Recommendation: ${b.summaryReason}
     • Action Taken: ${b.shortfallLetter ? "Shortfall / Clarification Letter Generated" : b.rejectionLetter ? "Rejection Intimation Letter Generated" : "Qualified for Price Bid Opening"}
 --------------------------------------------------------------------------------`;
@@ -744,8 +966,8 @@ B. SUMMARY OF BIDDER SCRUTINY:
                 <tr>
                   <th className="p-3 border-b border-slate-200">Sl</th>
                   <th className="p-3 border-b border-slate-200">Bidder Name</th>
-                  <th className="p-3 border-b border-slate-200">Financial Turnover (Min Rs. {criteria.minAverageAnnualTurnoverCr} Cr)</th>
-                  <th className="p-3 border-b border-slate-200">Experience Criteria (Min Rs. {(criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2)} Cr)</th>
+                  <th className="p-3 border-b border-slate-200">Financial Turnover (Min Rs. {(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr)</th>
+                  <th className="p-3 border-b border-slate-200">Experience Criteria (Min Rs. {(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr)</th>
                   <th className="p-3 border-b border-slate-200">Banning Status</th>
                   <th className="p-3 border-b border-slate-200">Overall Recommendation</th>
                   <th className="p-3 border-b border-slate-200">Action Document</th>
@@ -775,22 +997,22 @@ B. SUMMARY OF BIDDER SCRUTINY:
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-1.5 mb-1">
-                        {b.financialEvaluation.status === "QUALIFIED" ? (
+                        {b.financialEvaluation?.status === "QUALIFIED" ? (
                           <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[11px]">
-                            QUALIFIED (Rs. {b.financialEvaluation.averageTurnoverCr} Cr)
+                            QUALIFIED (Rs. {(b.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2)} Cr)
                           </span>
-                        ) : b.financialEvaluation.status === "SHORTFALL" ? (
+                        ) : b.financialEvaluation?.status === "SHORTFALL" ? (
                           <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[11px]">
-                            SHORTFALL (Rs. {b.financialEvaluation.averageTurnoverCr} Cr)
+                            SHORTFALL (Rs. {(b.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2)} Cr)
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold text-[11px]">
-                            DISQUALIFIED (Rs. {b.financialEvaluation.averageTurnoverCr} Cr)
+                            DISQUALIFIED (Rs. {(b.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2)} Cr)
                           </span>
                         )}
                       </div>
                       <ul className="text-[11px] text-slate-600 list-disc pl-3 space-y-0.5">
-                        {b.financialEvaluation.reasons.map((r, rIdx) => (
+                        {(b.financialEvaluation?.reasons || []).map((r, rIdx) => (
                           <li key={rIdx}>{r}</li>
                         ))}
                       </ul>
@@ -798,11 +1020,11 @@ B. SUMMARY OF BIDDER SCRUTINY:
 
                     <td className="p-3">
                       <div className="flex items-center gap-1.5 mb-1">
-                        {b.experienceEvaluation.status === "QUALIFIED" ? (
+                        {b.experienceEvaluation?.status === "QUALIFIED" ? (
                           <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[11px]">
                             QUALIFIED
                           </span>
-                        ) : b.experienceEvaluation.status === "SHORTFALL" ? (
+                        ) : b.experienceEvaluation?.status === "SHORTFALL" ? (
                           <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[11px]">
                             SHORTFALL
                           </span>
@@ -813,14 +1035,14 @@ B. SUMMARY OF BIDDER SCRUTINY:
                         )}
                       </div>
                       <ul className="text-[11px] text-slate-600 list-disc pl-3 space-y-0.5">
-                        {b.experienceEvaluation.reasons.map((r, rIdx) => (
+                        {(b.experienceEvaluation?.reasons || []).map((r, rIdx) => (
                           <li key={rIdx}>{r}</li>
                         ))}
                       </ul>
                     </td>
 
                     <td className="p-3">
-                      {b.banningStatusAlert.isAlertTriggered ? (
+                      {b.banningStatusAlert?.isAlertTriggered ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -955,9 +1177,21 @@ B. SUMMARY OF BIDDER SCRUTINY:
 
           {/* Complete Bidder Document Dossier Banner (Single ZIP / Consolidated PDF / Multi-docs) */}
           {(() => {
+            if (!activeBidder) {
+              return (
+                <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500 space-y-3">
+                  <FileText className="w-10 h-10 text-slate-400 mx-auto" />
+                  <h4 className="text-base font-bold text-slate-800">No Bidders Available</h4>
+                  <p className="text-xs text-slate-500">
+                    Please add a bidder or load a sample case to evaluate eligibility.
+                  </p>
+                </div>
+              );
+            }
+
             const allSubmittedDocs = [
-              ...activeBidder.turnoverDocuments,
-              ...activeBidder.experienceDocuments,
+              ...(activeBidder.turnoverDocuments || []),
+              ...(activeBidder.experienceDocuments || []),
               ...(activeBidder.statutoryDocuments || []),
               ...(activeBidder.shortfallReplyDocuments || []),
             ];
@@ -1084,64 +1318,91 @@ B. SUMMARY OF BIDDER SCRUTINY:
           })()}
 
           {/* Active Bidder Details */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {activeBidder && (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Turnover Card */}
             <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <span>(i) Financial / Turnover Eligibility</span>
-                </h4>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-slate-900 text-sm">
+                    (i) Financial / Turnover Eligibility
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenTurnoverModal(activeBidder)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer border border-blue-200"
+                    title="Manually verify, correct, or enter annual turnover figures and UDIN"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit / Verify Turnover</span>
+                  </button>
+                </div>
                 <span
                   className={`px-2 py-0.5 rounded text-xs font-bold ${
-                    activeBidder.financialEvaluation.status === "QUALIFIED"
+                    activeBidder.financialEvaluation?.status === "QUALIFIED"
                       ? "bg-emerald-100 text-emerald-800"
-                      : activeBidder.financialEvaluation.status === "SHORTFALL"
+                      : activeBidder.financialEvaluation?.status === "SHORTFALL"
                       ? "bg-amber-100 text-amber-800"
                       : "bg-rose-100 text-rose-800"
                   }`}
                 >
-                  {activeBidder.financialEvaluation.status}
+                  {activeBidder.financialEvaluation?.status || "PENDING"}
                 </span>
               </div>
 
               <div className="bg-slate-50 p-3 rounded-lg text-xs space-y-1">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Tendered Required Average Turnover:</span>
-                  <span className="font-bold text-slate-800">Rs. {criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr</span>
+                  <span className="font-bold text-slate-800">Rs. {(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Bidder Evaluated Average Turnover:</span>
-                  <span className="font-bold text-blue-700">Rs. {activeBidder.financialEvaluation.averageTurnoverCr.toFixed(2)} Cr</span>
+                  <span className="font-bold text-blue-700">Rs. {(activeBidder.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2)} Cr</span>
                 </div>
               </div>
 
               {/* Year-by-year table */}
-              <table className="w-full text-xs text-left border border-slate-200 rounded">
-                <thead className="bg-slate-100 text-slate-700">
-                  <tr>
-                    <th className="p-2 border-b border-slate-200">Financial Year</th>
-                    <th className="p-2 border-b border-slate-200">Turnover (Rs. Cr)</th>
-                    <th className="p-2 border-b border-slate-200">CA Audited</th>
-                    <th className="p-2 border-b border-slate-200">UDIN Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeBidder.financialEvaluation.claimedTurnoverByYear.map((row, rIdx) => (
-                    <tr key={rIdx} className="border-b border-slate-100">
-                      <td className="p-2 font-medium">{row.year}</td>
-                      <td className="p-2 font-mono font-bold text-slate-800">{row.turnoverCr.toFixed(2)}</td>
-                      <td className="p-2 text-emerald-600">Yes (Audited)</td>
-                      <td className="p-2">
-                        {row.caUdinPresent ? (
-                          <span className="text-emerald-700 font-semibold">Valid UDIN</span>
-                        ) : (
-                          <span className="text-amber-700 font-bold">UDIN Missing</span>
-                        )}
-                      </td>
+              {(activeBidder.financialEvaluation?.claimedTurnoverByYear || []).length === 0 ? (
+                <div className="p-4 text-center border border-dashed border-slate-200 rounded-lg bg-slate-50 text-xs text-slate-500 space-y-2">
+                  <p>No annual turnover figures extracted yet from submitted documents.</p>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenTurnoverModal(activeBidder)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Enter / Verify Turnover Figures</span>
+                  </button>
+                </div>
+              ) : (
+                <table className="w-full text-xs text-left border border-slate-200 rounded">
+                  <thead className="bg-slate-100 text-slate-700">
+                    <tr>
+                      <th className="p-2 border-b border-slate-200">Financial Year</th>
+                      <th className="p-2 border-b border-slate-200">Turnover (Rs. Cr)</th>
+                      <th className="p-2 border-b border-slate-200">CA Audited</th>
+                      <th className="p-2 border-b border-slate-200">UDIN Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(activeBidder.financialEvaluation?.claimedTurnoverByYear || []).map((row, rIdx) => (
+                      <tr key={rIdx} className="border-b border-slate-100">
+                        <td className="p-2 font-medium">{row.year}</td>
+                        <td className="p-2 font-mono font-bold text-slate-800">{(row.turnoverCr ?? 0).toFixed(2)}</td>
+                        <td className="p-2 text-emerald-600">Yes (Audited)</td>
+                        <td className="p-2">
+                          {row.caUdinPresent ? (
+                            <span className="text-emerald-700 font-semibold">Valid UDIN</span>
+                          ) : (
+                            <span className="text-amber-700 font-bold">UDIN Missing</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
 
               {/* Upload Turnover Document */}
               <div className="pt-2">
@@ -1159,20 +1420,31 @@ B. SUMMARY OF BIDDER SCRUTINY:
 
             {/* Experience Card */}
             <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <span>(ii) Technical &amp; Experience Eligibility</span>
-                </h4>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-slate-900 text-sm">
+                    (ii) Technical &amp; Experience Eligibility
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenExperienceModal(activeBidder)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer border border-purple-200"
+                    title="Manually verify, correct, or enter past work orders and completion certificates"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit / Verify Experience</span>
+                  </button>
+                </div>
                 <span
                   className={`px-2 py-0.5 rounded text-xs font-bold ${
-                    activeBidder.experienceEvaluation.status === "QUALIFIED"
+                    activeBidder.experienceEvaluation?.status === "QUALIFIED"
                       ? "bg-emerald-100 text-emerald-800"
-                      : activeBidder.experienceEvaluation.status === "SHORTFALL"
+                      : activeBidder.experienceEvaluation?.status === "SHORTFALL"
                       ? "bg-amber-100 text-amber-800"
                       : "bg-rose-100 text-rose-800"
                   }`}
                 >
-                  {activeBidder.experienceEvaluation.status}
+                  {activeBidder.experienceEvaluation?.status || "PENDING"}
                 </span>
               </div>
 
@@ -1180,37 +1452,51 @@ B. SUMMARY OF BIDDER SCRUTINY:
                 <div className="flex justify-between">
                   <span className="text-slate-500">Single Work Order Value Threshold (80%):</span>
                   <span className="font-bold text-slate-800">
-                    Rs. {(criteria.singleWorkOrderValueCr || criteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2)} Cr
+                    Rs. {(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  <strong>Similar Work Definition:</strong> {criteria.similarWorkDefinition}
+                  <strong>Similar Work Definition:</strong> {criteria?.similarWorkDefinition}
                 </p>
               </div>
 
               {/* Submitted Works List */}
-              <div className="space-y-2">
-                {activeBidder.experienceEvaluation.submittedWorks.map((work, wIdx) => (
-                  <div key={wIdx} className="p-3 border border-slate-200 rounded-lg text-xs space-y-1 bg-white">
-                    <div className="flex justify-between font-bold text-slate-800">
-                      <span>{work.workTitle}</span>
-                      <span className="font-mono text-blue-700">Rs. {work.contractValueCr.toFixed(2)} Cr</span>
+              {(activeBidder.experienceEvaluation?.submittedWorks || []).length === 0 ? (
+                <div className="p-4 text-center border border-dashed border-slate-200 rounded-lg bg-slate-50 text-xs text-slate-500 space-y-2">
+                  <p>No qualifying work orders extracted yet from submitted files.</p>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenExperienceModal(activeBidder)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Enter / Verify Work Order Manually</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(activeBidder.experienceEvaluation?.submittedWorks || []).map((work, wIdx) => (
+                    <div key={wIdx} className="p-3 border border-slate-200 rounded-lg text-xs space-y-1 bg-white">
+                      <div className="flex justify-between font-bold text-slate-800">
+                        <span>{work.workTitle}</span>
+                        <span className="font-mono text-blue-700">Rs. {(work.contractValueCr ?? 0).toFixed(2)} Cr</span>
+                      </div>
+                      <div className="text-slate-600 flex justify-between text-[11px]">
+                        <span>Client: {work.clientName}</span>
+                        <span>Completion: {work.completionDate}</span>
+                      </div>
+                      <div className="flex items-center gap-3 pt-1 text-[11px]">
+                        <span className={work.matchesSimilarWorkScope ? "text-emerald-700 font-semibold" : "text-rose-700 font-bold"}>
+                          {work.matchesSimilarWorkScope ? "✓ Similar Scope" : "✗ Scope Mismatch"}
+                        </span>
+                        <span className={work.completionCertificateAttached ? "text-emerald-700 font-semibold" : "text-amber-700 font-bold"}>
+                          {work.completionCertificateAttached ? "✓ Client Cert Attached" : "✗ Client Cert Missing"}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-slate-600 flex justify-between text-[11px]">
-                      <span>Client: {work.clientName}</span>
-                      <span>Completion: {work.completionDate}</span>
-                    </div>
-                    <div className="flex items-center gap-3 pt-1 text-[11px]">
-                      <span className={work.matchesSimilarWorkScope ? "text-emerald-700 font-semibold" : "text-rose-700 font-bold"}>
-                        {work.matchesSimilarWorkScope ? "✓ Similar Scope" : "✗ Scope Mismatch"}
-                      </span>
-                      <span className={work.completionCertificateAttached ? "text-emerald-700 font-semibold" : "text-amber-700 font-bold"}>
-                        {work.completionCertificateAttached ? "✓ Client Cert Attached" : "✗ Client Cert Missing"}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
               {/* Upload Experience Document */}
               <div className="pt-2">
@@ -1312,6 +1598,8 @@ B. SUMMARY OF BIDDER SCRUTINY:
               </div>
             </div>
           </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1332,6 +1620,7 @@ B. SUMMARY OF BIDDER SCRUTINY:
             </div>
 
             {/* Letter Selector */}
+            {activeBidder && (
             <div className="flex items-center gap-2">
               <select
                 value={selectedBidderId}
@@ -1363,10 +1652,18 @@ B. SUMMARY OF BIDDER SCRUTINY:
                 <span>Download Letter (.txt)</span>
               </button>
             </div>
+            )}
           </div>
 
-          {/* Letter Preview Display */}
-          {activeBidder.shortfallLetter ? (
+          {!activeBidder ? (
+            <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <FileText className="w-8 h-8 text-slate-400 mx-auto" />
+              <h4 className="font-bold text-slate-800 text-sm">No Bidders Available</h4>
+              <p className="text-xs text-slate-500">
+                Please add a bidder or load a sample case to view communication letters.
+              </p>
+            </div>
+          ) : activeBidder.shortfallLetter ? (
             <div className="bg-slate-50 border border-amber-200 rounded-xl p-6 font-mono text-xs text-slate-800 space-y-4">
               <div className="border-b border-amber-200 pb-3 flex justify-between text-slate-600 font-sans text-xs">
                 <div>
@@ -2094,6 +2391,12 @@ B. SUMMARY OF BIDDER SCRUTINY:
                 <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
                   Supports <strong>.zip</strong> archive containing multiple files, single multi-page <strong>.pdf</strong>, <strong>.docx</strong>, <strong>.xlsx</strong>, or scanned images.
                 </p>
+                {dossierModalError && (
+                  <div className="mt-3 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{dossierModalError}</span>
+                  </div>
+                )}
                 <input
                   type="file"
                   multiple
@@ -2103,9 +2406,10 @@ B. SUMMARY OF BIDDER SCRUTINY:
                     let targetId = dossierTargetBidderId;
                     if (isAddingNewBidder) {
                       if (!newBidderNameInput.trim()) {
-                        alert("Please enter a bidder name first.");
+                        setDossierModalError("Please enter a bidder name first before uploading files.");
                         return;
                       }
+                      setDossierModalError(null);
                       targetId = handleAddNewBidderWithDossier(newBidderNameInput);
                     }
                     await handleFileUpload(e, targetId, "bundle");
@@ -2405,6 +2709,344 @@ B. SUMMARY OF BIDDER SCRUTINY:
                   <span>Export as Excel Spreadsheet</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: Edit / Verify Turnover Figures */}
+      {isTurnoverModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2 text-blue-700">
+                <Calculator className="w-5 h-5" />
+                <h4 className="font-bold text-slate-900 text-sm">
+                  Verify &amp; Edit Financial Turnover - {bidders.find((b) => b.bidderId === editingTurnoverBidderId)?.bidderName || "Bidder"}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTurnoverModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900 space-y-1">
+              <div className="flex justify-between font-semibold">
+                <span>Tendered Mandatory Average Turnover (Last 3 FYs):</span>
+                <span className="font-bold text-blue-800">Rs. {(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr</span>
+              </div>
+              <p className="text-[11px] text-blue-700">
+                Enter or correct the audited annual turnover figures extracted from the Chartered Accountant certificate or balance sheets. Average is automatically calculated live.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+              <table className="w-full text-xs text-left border border-slate-200 rounded-lg overflow-hidden">
+                <thead className="bg-slate-100 text-slate-700">
+                  <tr>
+                    <th className="p-2.5 border-b border-slate-200">Financial Year</th>
+                    <th className="p-2.5 border-b border-slate-200">Turnover (Rs. Cr)</th>
+                    <th className="p-2.5 border-b border-slate-200 text-center">CA Audited</th>
+                    <th className="p-2.5 border-b border-slate-200 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {editableTurnoverRows.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={row.year}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditableTurnoverRows((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, year: val } : r))
+                            );
+                          }}
+                          placeholder="FY 2023-24"
+                          className="w-full px-2 py-1 border border-slate-300 rounded font-medium text-xs text-slate-800 focus:outline-blue-500"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={row.turnoverCr}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setEditableTurnoverRows((prev) =>
+                                prev.map((r, i) => (i === idx ? { ...r, turnoverCr: val } : r))
+                              );
+                            }}
+                            className="w-full px-2 py-1 border border-slate-300 rounded font-mono font-bold text-xs text-slate-900 focus:outline-blue-500"
+                          />
+                          <span className="text-[11px] text-slate-500 font-semibold">Cr</span>
+                        </div>
+                      </td>
+                      <td className="p-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={row.auditedVerified}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setEditableTurnoverRows((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, auditedVerified: checked } : r))
+                            );
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                        />
+                      </td>
+                      <td className="p-2 text-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditableTurnoverRows((prev) => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                          title="Remove year"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextYr = `FY 202${editableTurnoverRows.length + 1}-2${editableTurnoverRows.length + 2}`;
+                    setEditableTurnoverRows((prev) => [
+                      ...prev,
+                      { year: nextYr, turnoverCr: 0, auditedVerified: true, caUdinPresent: true },
+                    ]);
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer border border-slate-300"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Financial Year</span>
+                </button>
+
+                {/* Live Average calculation */}
+                {(() => {
+                  const valid = editableTurnoverRows.filter((r) => r.year.trim().length > 0);
+                  const sum = valid.reduce((acc, r) => acc + (Number(r.turnoverCr) || 0), 0);
+                  const avg = valid.length > 0 ? parseFloat((sum / valid.length).toFixed(2)) : 0;
+                  const req = criteria?.minAverageAnnualTurnoverCr ?? 0;
+                  const meets = avg >= req && avg > 0;
+                  return (
+                    <div className="flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 text-xs">
+                      <span>Evaluated Average: <strong className="font-mono text-slate-900">Rs. {avg.toFixed(2)} Cr</strong></span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${meets ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
+                        {meets ? "✓ MEETS THRESHOLD" : "✗ BELOW THRESHOLD"}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Chartered Accountant UDIN entry */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
+                <label className="block text-xs font-bold text-slate-800 flex items-center justify-between">
+                  <span>Chartered Accountant (CA) 18-Digit UDIN:</span>
+                  <span className="text-[10px] font-normal text-slate-500">
+                    {editableUdinInput.trim().length}/18 chars
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={18}
+                  value={editableUdinInput}
+                  onChange={(e) => setEditableUdinInput(e.target.value.toUpperCase())}
+                  placeholder="e.g. 24098765BKXZ123498"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs text-slate-900 uppercase focus:outline-blue-500 tracking-wider"
+                />
+                <p className="text-[11px] text-slate-500">
+                  Mandatory under ICAI guidelines for PSU tenders. Leave blank if UDIN is missing on the turnover certificate (triggers Shortfall notice).
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsTurnoverModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTurnoverModal}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-xs"
+              >
+                Save &amp; Recalculate Eligibility
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: Edit / Verify Technical Experience Records */}
+      {isExperienceModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2 text-purple-700">
+                <FileCheck2 className="w-5 h-5" />
+                <h4 className="font-bold text-slate-900 text-sm">
+                  Verify &amp; Edit Technical Experience - {bidders.find((b) => b.bidderId === editingExpBidderId)?.bidderName || "Bidder"}
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExperienceModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-xs text-purple-900 space-y-1">
+              <div className="flex justify-between font-semibold">
+                <span>Single Work Order Minimum Value (80% Threshold):</span>
+                <span className="font-bold text-purple-800">
+                  Rs. {(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr
+                </span>
+              </div>
+              <p className="text-[11px] text-purple-700">
+                Verify or adjust the past executed work details. Check scope match and completion certificate availability as per NIT terms.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+              {editableWorks.map((work, idx) => (
+                <div key={idx} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800">Work Order #{idx + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditableWorks((prev) => prev.filter((_, i) => i !== idx))}
+                      className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Work Title / Scope Description:</label>
+                    <input
+                      type="text"
+                      value={work.workTitle}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditableWorks((prev) => prev.map((w, i) => (i === idx ? { ...w, workTitle: val } : w)));
+                      }}
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-medium text-xs text-slate-900 focus:outline-purple-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Client / Employer Organization:</label>
+                      <input
+                        type="text"
+                        value={work.clientName}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditableWorks((prev) => prev.map((w, i) => (i === idx ? { ...w, clientName: val } : w)));
+                        }}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded text-xs text-slate-900 focus:outline-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Executed Contract Value (Rs. Cr):</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={work.contractValueCr}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setEditableWorks((prev) => prev.map((w, i) => (i === idx ? { ...w, contractValueCr: val } : w)));
+                        }}
+                        className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-mono font-bold text-xs text-slate-900 focus:outline-purple-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 pt-1 text-[11px]">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={work.matchesSimilarWorkScope}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setEditableWorks((prev) => prev.map((w, i) => (i === idx ? { ...w, matchesSimilarWorkScope: checked } : w)));
+                        }}
+                        className="w-4 h-4 text-purple-600 rounded"
+                      />
+                      <span className="font-semibold text-slate-700">Matches Tendered 'Similar Work' Scope</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={work.completionCertificateAttached}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setEditableWorks((prev) => prev.map((w, i) => (i === idx ? { ...w, completionCertificateAttached: checked } : w)));
+                        }}
+                        className="w-4 h-4 text-purple-600 rounded"
+                      />
+                      <span className="font-semibold text-slate-700">Client Completion Certificate Attached</span>
+                    </label>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditableWorks((prev) => [
+                    ...prev,
+                    {
+                      workTitle: "Additional Completed Facility & Electrical O&M Work",
+                      clientName: "State Infrastructure PSU / Govt Corp",
+                      contractValueCr: 0,
+                      completionDate: "31-03-2024",
+                      matchesSimilarWorkScope: true,
+                      completionCertificateAttached: true,
+                      satisfactoryPerformanceReportAttached: true,
+                    },
+                  ]);
+                }}
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer border border-slate-300"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Work Order</span>
+              </button>
+            </div>
+
+            <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsExperienceModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveExperienceModal}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-xs"
+              >
+                Save &amp; Recalculate Eligibility
+              </button>
             </div>
           </div>
         </div>

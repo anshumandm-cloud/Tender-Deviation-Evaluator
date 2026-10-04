@@ -75,7 +75,7 @@ import {
   generateInitialAuditLogs,
   createAuditEntry,
 } from "./utils/auditUtils";
-import { triggerFileDownload } from "./utils/exportUtils";
+import { triggerFileDownload, exportComprehensiveEvaluationToPDF } from "./utils/exportUtils";
 
 export default function App() {
   // Navigation - default opening tab is Services (O&M)
@@ -903,6 +903,27 @@ export default function App() {
     }
   };
 
+  // Full PDF Export (Comparative Matrix + Harmonized Addendum Clauses)
+  const handleExportFullEvaluationPDF = () => {
+    exportComprehensiveEvaluationToPDF(
+      comparativeEvaluation,
+      reviewedClausesData,
+      metadata,
+      officerProfile,
+      activeFormatTemplate,
+      singleEvaluations
+    );
+    logAuditAction(
+      "Exported Full Evaluation PDF",
+      "System & Files",
+      `Exported comprehensive evaluation report (Comparative Deviation Matrix & Harmonized Clauses) as formatted PDF`,
+      `Package: ${metadata.packageTitle} | Ref: ${metadata.tenderRefNo}`,
+      "Tender Case",
+      "Executive PDF Reporting"
+    );
+    showToast("Comprehensive Evaluation PDF generated and downloaded!", "success");
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-800">
       {/* System Migration / New URL Notice */}
@@ -926,6 +947,7 @@ export default function App() {
         onNewBlankCase={handleNewBlankCase}
         onSaveProject={handleSaveProject}
         onOpenProject={handleOpenProjectClick}
+        onExportFullPDF={handleExportFullEvaluationPDF}
         onOpenDesktopModal={() => setIsDesktopModalOpen(true)}
         onOpenAndroidModal={() => setIsAndroidModalOpen(true)}
         onOpenKnowMeModal={(tab) => {
@@ -1165,6 +1187,8 @@ export default function App() {
         {metadata.tenderType !== "SERVICES_O_AND_M" && activeTab === "comparative" && (
           <ComparativeTab
             comparativeData={comparativeEvaluation}
+            reviewedData={reviewedClausesData}
+            metadata={metadata}
             officerDirectives={officerDirectives}
             activeFormatTemplate={activeFormatTemplate}
             onOpenChatbot={() => setActiveTab("chat")}
@@ -1175,6 +1199,7 @@ export default function App() {
         {metadata.tenderType !== "SERVICES_O_AND_M" && activeTab === "harmonized" && (
           <HarmonizedClausesTab
             reviewedData={reviewedClausesData}
+            comparativeData={comparativeEvaluation}
             metadata={metadata}
             onGenerateReviewedClauses={handleGenerateReviewedClauses}
             isGenerating={isGeneratingHarmonized}

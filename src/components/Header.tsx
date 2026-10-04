@@ -25,6 +25,7 @@ interface HeaderProps {
   onNewBlankCase: () => void;
   onSaveProject: () => void;
   onOpenProject: () => void;
+  onExportFullPDF?: () => void;
   onOpenDesktopModal: () => void;
   onOpenKnowMeModal: (tab?: "overview" | "features" | "security" | "offline" | "author") => void;
   onOpenAndroidModal?: () => void;
@@ -40,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   onNewBlankCase,
   onSaveProject,
   onOpenProject,
+  onExportFullPDF,
   onOpenDesktopModal,
   onOpenKnowMeModal,
   onOpenAndroidModal,
@@ -194,6 +196,17 @@ export const Header: React.FC<HeaderProps> = ({
             <Download className="w-3.5 h-3.5 text-emerald-400" />
             <span>Save Case</span>
           </button>
+
+          {hasActiveData && onExportFullPDF && (
+            <button
+              onClick={onExportFullPDF}
+              className="px-3 py-1.5 bg-gradient-to-r from-rose-700 to-red-800 hover:from-rose-600 hover:to-red-700 text-white text-xs font-semibold rounded-md border border-rose-500/50 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ring-1 ring-rose-400/40"
+              title="Export complete evaluation report (Comparative Deviation Matrix & Harmonized Addendum Clauses) to a formatted PDF"
+            >
+              <FileText className="w-3.5 h-3.5 text-rose-200" />
+              <span>Export Full PDF</span>
+            </button>
+          )}
 
           {hasActiveData && (
             <button

@@ -998,12 +998,24 @@ app.post("/api/send-feedback", (req, res) => {
 // Vite Middleware for development & static serving for production
 async function startServer() {
   // Always serve public directory for PWA icons, manifest, and .well-known/assetlinks.json
-  app.use(express.static(path.join(process.cwd(), "public")));
+  const publicPath = path.join(process.cwd(), "public");
+  if (fs.existsSync(publicPath)) {
+    app.use(express.static(publicPath));
+  }
 
-  const isDev = process.env.NODE_ENV === "development";
   const distPath = path.join(process.cwd(), "dist");
+  const distIndexExists = fs.existsSync(path.join(distPath, "index.html"));
 
-  if (isDev) {
+  // Detect production environment (Cloud Run, Docker container, npm start, or when dist is built and port is container port)
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    Boolean(process.env.K_SERVICE) ||
+    process.env.npm_lifecycle_event === "start" ||
+    (distIndexExists && process.env.PORT !== undefined && process.env.PORT !== "3000");
+
+  const isDev = !isProduction;
+
+  if (isDev && !distIndexExists) {
     try {
       const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
@@ -1012,8 +1024,8 @@ async function startServer() {
       });
       app.use(vite.middlewares);
     } catch (viteErr) {
-      console.warn("Could not start Vite dev middleware, falling back to static dist files:", viteErr);
-      if (fs.existsSync(distPath)) {
+      console.warn("Could not start Vite dev middleware, falling back to static files:", viteErr);
+      if (distIndexExists) {
         app.use(express.static(distPath));
         app.get("*", (_req, res) => {
           res.sendFile(path.join(distPath, "index.html"));
@@ -1021,15 +1033,31 @@ async function startServer() {
       }
     }
   } else {
-    // Production mode (Cloud Run / npm start): serve pre-compiled bundle from dist
-    app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    // Production mode (Cloud Run / npm start / built dist): serve pre-compiled bundle from dist
+    if (distIndexExists) {
+      app.use(express.static(distPath));
+      app.get("*", (_req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    } else {
+      // In case dist doesn't exist yet, try vite middleware or fallback message
+      try {
+        const { createServer: createViteServer } = await import("vite");
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+      } catch {
+        app.get("*", (_req, res) => {
+          res.status(200).send("Tender Deviation Evaluator is initializing. Please refresh in a moment.");
+        });
+      }
+    }
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Dealing Officer Evaluation Server running on port ${PORT} [NODE_ENV=${process.env.NODE_ENV || "production"}]`);
+    console.log(`Dealing Officer Evaluation Server running on port ${PORT} [Mode=${isProduction ? "production" : "development"}]`);
   });
 }
 

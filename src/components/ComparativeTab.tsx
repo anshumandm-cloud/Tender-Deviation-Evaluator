@@ -18,11 +18,13 @@ import {
   ArrowUpDown,
   Sparkles,
 } from "lucide-react";
-import { ComparativeEvaluation, OfficerDirective, UploadedFormatTemplate } from "../types";
-import { exportComparativeToExcel, exportComparativeToWord } from "../utils/exportUtils";
+import { ComparativeEvaluation, OfficerDirective, UploadedFormatTemplate, ReviewedClausesData, TenderMetadata } from "../types";
+import { exportComparativeToExcel, exportComparativeToWord, exportComparativeToPDF, exportComprehensiveEvaluationToPDF } from "../utils/exportUtils";
 
 interface ComparativeTabProps {
   comparativeData: ComparativeEvaluation | null;
+  reviewedData?: ReviewedClausesData | null;
+  metadata?: TenderMetadata;
   officerDirectives?: OfficerDirective[];
   activeFormatTemplate?: UploadedFormatTemplate | null;
   onOpenChatbot?: () => void;
@@ -31,6 +33,8 @@ interface ComparativeTabProps {
 
 export const ComparativeTab: React.FC<ComparativeTabProps> = ({
   comparativeData,
+  reviewedData,
+  metadata,
   officerDirectives = [],
   activeFormatTemplate,
   onOpenChatbot,
@@ -197,21 +201,48 @@ export const ComparativeTab: React.FC<ComparativeTabProps> = ({
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
+              onClick={() =>
+                exportComprehensiveEvaluationToPDF(
+                  comparativeData,
+                  reviewedData || null,
+                  metadata,
+                  undefined,
+                  activeFormatTemplate
+                )
+              }
+              className="px-3.5 py-2 bg-gradient-to-r from-rose-700 to-red-800 hover:from-rose-600 hover:to-red-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer ring-1 ring-rose-400/50"
+              title="Download complete evaluation PDF including Comparative Matrix, Harmonized Clauses & Committee Sign-Off"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Export Full Evaluation PDF</span>
+              <span className="text-[10px] bg-rose-950/60 text-rose-200 px-1.5 py-0.5 rounded font-mono font-medium">Matrix + Clauses</span>
+            </button>
+
+            <button
+              onClick={() => exportComparativeToPDF(comparativeData, metadata)}
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700"
+              title="Download standalone Comparative Matrix as PDF document"
+            >
+              <FileText className="w-3.5 h-3.5 text-rose-400" />
+              <span>Matrix PDF</span>
+            </button>
+
+            <button
               onClick={() => exportComparativeToWord(comparativeData)}
-              className="px-3.5 py-2 bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3 py-2 bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
               title="Download consolidated comparative report in Word"
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>Download Word (.docx)</span>
+              <span>Word (.docx)</span>
             </button>
 
             <button
               onClick={() => exportComparativeToExcel(comparativeData)}
-              className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3 py-2 bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
               title="Download full comparative matrix in Excel with dedicated bidder columns"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Download Excel (.xlsx)</span>
+              <span>Excel (.xlsx)</span>
             </button>
           </div>
         </div>
