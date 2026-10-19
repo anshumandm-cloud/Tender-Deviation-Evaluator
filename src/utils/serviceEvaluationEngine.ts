@@ -18,6 +18,7 @@ import {
 } from "../types/serviceEvaluation";
 import { analyzeDocumentTextForTampering } from "./ocrAndTamperAnalyzer";
 import { DEFAULT_BLACKLISTED_ENTITIES, checkBidderBanningStatus } from "./banningDatabase";
+import { formatIndianCurrencyCr, parseCurrencyAmountToCrores } from "./currencyFormatter";
 
 /**
  * Standard Default Guidelines on Shortfall/Clarification in Open Tender (OT) Cases
@@ -128,45 +129,51 @@ export function parseTurnoverFromText(
     // Check explicit unit tokens on THIS line first
     const hasLineCr = /(?:\bcr(?:ores?)?|\(in\s*cr(?:ores?)?\)|\bamount\s*in\s*cr(?:ores?)?|in\s*cr)/i.test(lineLower);
     const hasLineLakh = /(?:\blakhs?|\blacs?|\(in\s*lakhs?\)|\bamount\s*in\s*lakhs?|in\s*lakhs?|in\s*lacs?)/i.test(lineLower);
-    const hasLineThousand = /(?:\bthousands?|\(in\s*thousands?\))/i.test(lineLower);
+    const hasLineThousand = /(?:\bthousands?|\(in\s*thousands?\)|k\b)/i.test(lineLower);
 
     if (hasLineCr) {
-      return parseFloat(val.toFixed(2));
+      return parseFloat(val.toFixed(6));
     }
     if (hasLineLakh) {
-      return parseFloat((val / 100).toFixed(2));
+      return parseFloat((val / 100).toFixed(6));
     }
     if (hasLineThousand) {
-      return parseFloat((val / 100000).toFixed(2));
+      // 30 thousand INR = 30 * 1,000 / 10,000,000 = 0.003 Cr
+      return parseFloat(((val * 1000) / 10000000).toFixed(6));
     }
 
     // Next, check table header unit if no unit on token
     if (headerUnit === "cr") {
-      return parseFloat(val.toFixed(2));
+      return parseFloat(val.toFixed(6));
     }
     if (headerUnit === "lakh") {
-      return parseFloat((val / 100).toFixed(2));
+      return parseFloat((val / 100).toFixed(6));
     }
     if (headerUnit === "thousands") {
-      return parseFloat((val / 100000).toFixed(2));
+      return parseFloat(((val * 1000) / 10000000).toFixed(6));
     }
 
     // Inspect magnitude if unit is completely unspecified:
     if (val >= 10000000) {
       // Raw INR >= 1 Crore (e.g. 18,50,00,000)
-      return parseFloat((val / 10000000).toFixed(2));
+      return parseFloat((val / 10000000).toFixed(6));
     }
     if (val >= 100000 && val < 10000000) {
-      // Raw INR in Lakhs (e.g. 15,50,000)
-      return parseFloat((val / 10000000).toFixed(2));
+      // Raw INR in Lakhs (e.g. 15,50,000 = 0.155 Cr, 3,00,000 = 0.03 Cr)
+      return parseFloat((val / 10000000).toFixed(6));
     }
-    if (val >= 250 && val < 100000) {
-      // In Indian balance sheets without explicit unit, numbers in hundreds/thousands (e.g. 1,680.00 or 2,140.00) are almost universally Lakhs
-      return parseFloat((val / 100).toFixed(2));
+    if (val >= 1000 && val < 100000) {
+      // Raw INR in thousands (e.g. 30,000 = 0.003 Cr)
+      if (/(?:rs\.?|inr|₹|\/\-)/i.test(lineLower) || val >= 10000) {
+        return parseFloat((val / 10000000).toFixed(6));
+      }
+      return parseFloat((val / 100).toFixed(6));
+    }
+    if (val >= 250 && val < 1000) {
+      return parseFloat((val / 100).toFixed(6));
     }
 
-    // Numbers <= 250 without unit in tender eligibility documents are typically Crores (e.g. 16.80, 18.50, 21.40)
-    return parseFloat(val.toFixed(2));
+    return parseFloat(val.toFixed(6));
   };
 
   // Helper to extract all numbers from a string
@@ -281,9 +288,10 @@ export function parseTurnoverFromText(
         let crVal = 0;
         if (tokenUnit) {
           const u = tokenUnit.toLowerCase();
-          if (u.startsWith("cr")) crVal = parseFloat(extractedNum.toFixed(2));
-          else if (u.startsWith("lakh") || u.startsWith("lac")) crVal = parseFloat((extractedNum / 100).toFixed(2));
-          else if (u.startsWith("m")) crVal = parseFloat((extractedNum * 0.1).toFixed(2));
+          if (u.startsWith("cr")) crVal = parseFloat(extractedNum.toFixed(6));
+          else if (u.startsWith("lakh") || u.startsWith("lac")) crVal = parseFloat((extractedNum / 100).toFixed(6));
+          else if (u.startsWith("thousand") || u === "k") crVal = parseFloat(((extractedNum * 1000) / 10000000).toFixed(6));
+          else if (u.startsWith("m")) crVal = parseFloat((extractedNum * 0.1).toFixed(6));
           else crVal = convertNumberToCrores(extractedNum, line, currentTableUnit);
         } else {
           crVal = convertNumberToCrores(extractedNum, line, currentTableUnit);
@@ -298,7 +306,7 @@ export function parseTurnoverFromText(
 
   // 3. Fallback scan: multi-line global regex if < 2 records found
   if (yearlyRecordsMap.size < 2) {
-    const fyRegex = /(?:fy|f\.y\.|financial\s*year)?\s*(20[1-2][0-9][\s\-\/\_]+(?:20)?[0-9]{2})[\s\S]{1,80}?(?:rs\.?|inr|₹)?\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|crore|million)?/gi;
+    const fyRegex = /(?:fy|f\.y\.|financial\s*year)?\s*(20[1-2][0-9][\s\-\/\_]+(?:20)?[0-9]{2})[\s\S]{1,80}?(?:rs\.?|inr|₹)?\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|thousands?|k|crore|million)?/gi;
     let m;
     while ((m = fyRegex.exec(text)) !== null) {
       const yr = normalizeFinancialYear(m[1]);
@@ -306,11 +314,13 @@ export function parseTurnoverFromText(
         const num = cleanNumber(m[2]);
         const unit = m[3]?.toLowerCase();
         let cr = 0;
-        if (unit?.startsWith("cr")) cr = parseFloat(num.toFixed(2));
-        else if (unit?.startsWith("lakh") || unit?.startsWith("lac")) cr = parseFloat((num / 100).toFixed(2));
-        else if (num >= 10000000) cr = parseFloat((num / 10000000).toFixed(2));
-        else if (num >= 250) cr = parseFloat((num / 100).toFixed(2));
-        else cr = parseFloat(num.toFixed(2));
+        if (unit?.startsWith("cr")) cr = parseFloat(num.toFixed(6));
+        else if (unit?.startsWith("lakh") || unit?.startsWith("lac")) cr = parseFloat((num / 100).toFixed(6));
+        else if (unit?.startsWith("thousand") || unit === "k") cr = parseFloat(((num * 1000) / 10000000).toFixed(6));
+        else if (num >= 10000000) cr = parseFloat((num / 10000000).toFixed(6));
+        else if (num >= 1000) cr = parseFloat((num / 10000000).toFixed(6));
+        else if (num >= 250) cr = parseFloat((num / 100).toFixed(6));
+        else cr = parseFloat(num.toFixed(6));
 
         if (cr > 0 && cr < 100000) {
           yearlyRecordsMap.set(yr, cr);
@@ -319,23 +329,15 @@ export function parseTurnoverFromText(
     }
   }
 
-  // 4. Check for explicit "Average Annual Turnover" statement
+  // 4. Check for explicit "Average Annual Turnover" statement (strictly ignoring year counts)
   let explicitAverage: number | null = null;
-  const avgRegex = /(?:average\s+annual\s+(?:financial\s+)?turnover|average\s+turnover|mean\s+annual\s+turnover)[^.\n]{0,80}?(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|crore)?/i;
+  const avgRegex = /(?:average\s+annual\s+(?:financial\s+)?turnover|average\s+turnover|mean\s+annual\s+turnover)[^.\n]{0,120}?(?:(?:not\s+less\s+than|at\s+least|is|amounting\s+to|of)\s*)?(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|thousands?|k|\/\-)?(?!\s*(?:financial\s*)?years?|\s*fys?|\s*months?)/i;
   const avgMatch = text.match(avgRegex);
   if (avgMatch && avgMatch[1]) {
-    const rawVal = cleanNumber(avgMatch[1]);
-    const unit = avgMatch[2]?.toLowerCase();
-    if (unit?.startsWith("cr")) {
-      explicitAverage = parseFloat(rawVal.toFixed(2));
-    } else if (unit?.startsWith("lakh") || unit?.startsWith("lac")) {
-      explicitAverage = parseFloat((rawVal / 100).toFixed(2));
-    } else if (rawVal >= 10000000) {
-      explicitAverage = parseFloat((rawVal / 10000000).toFixed(2));
-    } else if (rawVal >= 250) {
-      explicitAverage = parseFloat((rawVal / 100).toFixed(2));
-    } else {
-      explicitAverage = parseFloat(rawVal.toFixed(2));
+    const fullToken = `${avgMatch[1]} ${avgMatch[2] || ""}`.trim();
+    const val = parseCurrencyAmountToCrores(fullToken);
+    if (val !== null && val > 0) {
+      explicitAverage = val;
     }
   }
 
@@ -353,11 +355,11 @@ export function parseTurnoverFromText(
     });
   }
 
-  // 6. Calculate average turnover
+  // 6. Calculate average turnover without truncating sub-lakh amounts
   let finalAverage = 0;
   if (yearlyRecords.length > 0) {
     const sum = yearlyRecords.reduce((acc, r) => acc + r.turnoverCr, 0);
-    finalAverage = parseFloat((sum / yearlyRecords.length).toFixed(2));
+    finalAverage = parseFloat((sum / yearlyRecords.length).toFixed(6));
   } else if (explicitAverage !== null && explicitAverage > 0) {
     finalAverage = explicitAverage;
     yearlyRecords.push(
@@ -449,12 +451,12 @@ function parseExperienceFromText(text: string, criteria: ServiceCriteriaRequirem
       {
         workTitle,
         clientName,
-        contractValueCr: parseFloat(finalValue.toFixed(2)),
+        contractValueCr: parseFloat(finalValue.toFixed(6)),
         completionDate: "31-03-2024",
         matchesSimilarWorkScope: matchesScope,
         completionCertificateAttached: hasCompletionCert,
         satisfactoryPerformanceReportAttached: hasCompletionCert,
-        remarks: `Executed value Rs. ${finalValue.toFixed(2)} Cr ${finalValue >= minRequiredWorkValue ? "meets/exceeds" : "falls below"} single work threshold of Rs. ${minRequiredWorkValue.toFixed(2)} Cr.`,
+        remarks: `Executed value ${formatIndianCurrencyCr(finalValue)} ${finalValue >= minRequiredWorkValue ? "meets/exceeds" : "falls below"} single work threshold of ${formatIndianCurrencyCr(minRequiredWorkValue)}.`,
       },
     ],
   };
@@ -509,7 +511,7 @@ export function evaluateBidderEligibility(
   if (options?.preserveManualData || (hasExistingValidRecords && (finParsed.records.length === 0 || finParsed.averageTurnoverCr === 0))) {
     yearlyRecords = existingRecords;
     const sum = yearlyRecords.reduce((acc, r) => acc + (Number(r.turnoverCr) || 0), 0);
-    claimedAverage = yearlyRecords.length > 0 ? parseFloat((sum / yearlyRecords.length).toFixed(2)) : (updatedBidder.financialEvaluation?.averageTurnoverCr || 0);
+    claimedAverage = yearlyRecords.length > 0 ? parseFloat((sum / yearlyRecords.length).toFixed(6)) : (updatedBidder.financialEvaluation?.averageTurnoverCr || 0);
     hasUdin = hasUdin || yearlyRecords.some((r) => r.caUdinPresent) || Boolean(updatedBidder.financialEvaluation?.reasons?.some((r) => r.includes("UDIN")));
     if (!udinFound && updatedBidder.financialEvaluation?.reasons) {
       const match = updatedBidder.financialEvaluation.reasons.find((r) => r.includes("UDIN"))?.match(/UDIN[:\s\-]*([0-9A-Za-z]{12,20})/i);
@@ -530,11 +532,11 @@ export function evaluateBidderEligibility(
     );
   } else if (claimedAverage >= requiredTurnover) {
     financialReasons.push(
-      `Average Annual Turnover of Rs. ${claimedAverage.toFixed(2)} Cr meets required threshold of Rs. ${requiredTurnover.toFixed(2)} Cr.`
+      `Average Annual Turnover of ${formatIndianCurrencyCr(claimedAverage)} meets required threshold of ${formatIndianCurrencyCr(requiredTurnover)}.`
     );
   } else {
     financialReasons.push(
-      `Average Annual Turnover of Rs. ${claimedAverage.toFixed(2)} Cr falls short of required Rs. ${requiredTurnover.toFixed(2)} Cr.`
+      `Average Annual Turnover of ${formatIndianCurrencyCr(claimedAverage)} falls short of required ${formatIndianCurrencyCr(requiredTurnover)}.`
     );
   }
 
@@ -561,7 +563,7 @@ export function evaluateBidderEligibility(
 
   updatedBidder.financialEvaluation = {
     claimedTurnoverByYear: yearlyRecords,
-    averageTurnoverCr: parseFloat(claimedAverage.toFixed(2)),
+    averageTurnoverCr: parseFloat(claimedAverage.toFixed(6)),
     requiredTurnoverCr: requiredTurnover,
     status: finStatus,
     reasons: financialReasons,
@@ -598,7 +600,7 @@ export function evaluateBidderEligibility(
   } else if (highestWorkValue >= minRequiredWorkValue && scopeMatches && certAttached) {
     expStatus = "QUALIFIED";
     expReasons.push(
-      `Submitted work of value Rs. ${highestWorkValue.toFixed(2)} Cr satisfies technical eligibility requirement (Threshold: Rs. ${minRequiredWorkValue.toFixed(2)} Cr).`
+      `Submitted work of value ${formatIndianCurrencyCr(highestWorkValue)} satisfies technical eligibility requirement (Threshold: ${formatIndianCurrencyCr(minRequiredWorkValue)}).`
     );
     expReasons.push("Scope of work executed aligns with tendered 'Similar Work' definition.");
     expReasons.push("Valid Completion Certificate and Satisfactory Performance Report submitted.");
@@ -606,7 +608,7 @@ export function evaluateBidderEligibility(
     // Has eligible work order, but missing client completion certificate -> SHORTFALL
     expStatus = "SHORTFALL";
     expReasons.push(
-      `Work order value of Rs. ${highestWorkValue.toFixed(2)} Cr meets threshold, but formal Final Completion Certificate signed by client authority is not attached.`
+      `Work order value of ${formatIndianCurrencyCr(highestWorkValue)} meets threshold, but formal Final Completion Certificate signed by client authority is not attached.`
     );
     expReasons.push("Eligible for Shortfall clarification as per OT guidelines since base work order was submitted before tender opening.");
   } else {
@@ -617,7 +619,7 @@ export function evaluateBidderEligibility(
     }
     if (highestWorkValue < minRequiredWorkValue) {
       expReasons.push(
-        `Executed work value of Rs. ${highestWorkValue.toFixed(2)} Cr is below minimum mandatory requirement of Rs. ${minRequiredWorkValue.toFixed(2)} Cr.`
+        `Executed work value of ${formatIndianCurrencyCr(highestWorkValue)} is below minimum mandatory requirement of ${formatIndianCurrencyCr(minRequiredWorkValue)}.`
       );
     }
     expReasons.push("Per Open Tender guidelines, no shortfall can be permitted to introduce new work orders post-bid opening.");

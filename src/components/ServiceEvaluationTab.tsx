@@ -43,6 +43,7 @@ import {
 import { TenderMetadata, UploadedFormatTemplate } from "../types";
 import { parseUploadedFile, categorizeDocument } from "../utils/fileParser";
 import { evaluateBidderEligibility } from "../utils/serviceEvaluationEngine";
+import { formatIndianCurrencyCr } from "../utils/currencyFormatter";
 import {
   triggerFileDownload,
   exportServiceEvaluationToExcel,
@@ -281,7 +282,7 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
 
     const validRows = editableTurnoverRows.filter((r) => r.year.trim().length > 0);
     const sum = validRows.reduce((acc, r) => acc + (Number(r.turnoverCr) || 0), 0);
-    const avg = validRows.length > 0 ? parseFloat((sum / validRows.length).toFixed(2)) : 0;
+    const avg = validRows.length > 0 ? parseFloat((sum / validRows.length).toFixed(6)) : 0;
     const hasUdin = Boolean(editableUdinInput.trim().length >= 10 || validRows.some((r) => r.caUdinPresent));
 
     const updatedRows = validRows.map((r) => ({
@@ -297,9 +298,9 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
     if (avg === 0) {
       reasons.push("No turnover figures specified or validated.");
     } else if (avg >= criteria.minAverageAnnualTurnoverCr) {
-      reasons.push(`Average Annual Turnover of Rs. ${avg.toFixed(2)} Cr meets required threshold of Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr.`);
+      reasons.push(`Average Annual Turnover of ${formatIndianCurrencyCr(avg)} meets required threshold of ${formatIndianCurrencyCr(criteria.minAverageAnnualTurnoverCr)}.`);
     } else {
-      reasons.push(`Average Annual Turnover of Rs. ${avg.toFixed(2)} Cr falls short of required Rs. ${criteria.minAverageAnnualTurnoverCr.toFixed(2)} Cr.`);
+      reasons.push(`Average Annual Turnover of ${formatIndianCurrencyCr(avg)} falls short of required ${formatIndianCurrencyCr(criteria.minAverageAnnualTurnoverCr)}.`);
     }
 
     if (hasUdin) {
@@ -334,15 +335,15 @@ export const ServiceEvaluationTab: React.FC<ServiceEvaluationTabProps> = ({
 
     setUploadFeedback({
       type: "success",
-      message: `Updated turnover evaluation for ${targetBidder.bidderName}: Average Rs. ${avg.toFixed(2)} Cr (${isQualified ? "QUALIFIED" : isShortfall ? "SHORTFALL" : "REJECTED"}).`,
+      message: `Updated turnover evaluation for ${targetBidder.bidderName}: Average ${formatIndianCurrencyCr(avg)} (${isQualified ? "QUALIFIED" : isShortfall ? "SHORTFALL" : "REJECTED"}).`,
     });
     setTimeout(() => setUploadFeedback(null), 5000);
 
     onLogAudit?.(
       "Verified & Adjusted Turnover Figures",
       "Bidders & Deviations",
-      `Dealing Officer manually verified and updated turnover for ${targetBidder.bidderName}: Rs. ${avg.toFixed(2)} Cr`,
-      `Years: ${updatedRows.map((r) => `${r.year}: Rs. ${r.turnoverCr} Cr`).join(", ")} | UDIN: ${editableUdinInput || "None"}`,
+      `Dealing Officer manually verified and updated turnover for ${targetBidder.bidderName}: ${formatIndianCurrencyCr(avg)}`,
+      `Years: ${updatedRows.map((r) => `${r.year}: ${formatIndianCurrencyCr(r.turnoverCr)}`).join(", ")} | UDIN: ${editableUdinInput || "None"}`,
       `Bidder: ${targetBidder.bidderName}`,
       "Financial Eligibility Scrutiny"
     );
@@ -657,7 +658,7 @@ Date: ${new Date().toLocaleDateString("en-IN")}
 --------------------------------------------------------------------------------
 
 A. QUALIFYING CRITERIA SPECIFIED IN NIT:
-1. Financial Turnover: Minimum Average Annual Turnover of Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr in last 3 financial years with valid CA UDIN.
+1. Financial Turnover: Minimum Average Annual Turnover of ${formatIndianCurrencyCr(criteria?.minAverageAnnualTurnoverCr)} in last 3 financial years with valid CA UDIN.
 2. Experience Criteria: Completed Similar Work (Threshold: Single work >= Rs. ${(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr).
 3. Similar Work Scope: ${criteria?.similarWorkDefinition || "Similar Works"}
 
@@ -669,7 +670,7 @@ B. SUMMARY OF BIDDER SCRUTINY:
 [${idx + 1}] BIDDER: ${b.bidderName}
     • Overall Status: ${b.overallStatus}
     • Banning & Debarment Status: ${b.banningStatusAlert?.isAlertTriggered ? `FLAGGED / UNDER SCRUTINY (${b.banningStatusAlert?.reason || "Debarment Notice"})` : "CLEAN (Verified against CPPP/GeM/CVC/Internal registers)"}
-    • Financial Turnover Status: ${b.financialEvaluation?.status || "PENDING"} (Average: Rs. ${(b.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2)} Cr)
+    • Financial Turnover Status: ${b.financialEvaluation?.status || "PENDING"} (Average: ${formatIndianCurrencyCr(b.financialEvaluation?.averageTurnoverCr)})
       - Grounds: ${(b.financialEvaluation?.reasons || []).join(" | ")}
     • Experience Criteria Status: ${b.experienceEvaluation?.status || "PENDING"}
       - Grounds: ${(b.experienceEvaluation?.reasons || []).join(" | ")}
@@ -966,7 +967,7 @@ B. SUMMARY OF BIDDER SCRUTINY:
                 <tr>
                   <th className="p-3 border-b border-slate-200">Sl</th>
                   <th className="p-3 border-b border-slate-200">Bidder Name</th>
-                  <th className="p-3 border-b border-slate-200">Financial Turnover (Min Rs. {(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr)</th>
+                  <th className="p-3 border-b border-slate-200">Financial Turnover (Min {formatIndianCurrencyCr(criteria?.minAverageAnnualTurnoverCr, { compact: true })})</th>
                   <th className="p-3 border-b border-slate-200">Experience Criteria (Min Rs. {(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr)</th>
                   <th className="p-3 border-b border-slate-200">Banning Status</th>
                   <th className="p-3 border-b border-slate-200">Overall Recommendation</th>
@@ -1354,11 +1355,11 @@ B. SUMMARY OF BIDDER SCRUTINY:
               <div className="bg-slate-50 p-3 rounded-lg text-xs space-y-1">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Tendered Required Average Turnover:</span>
-                  <span className="font-bold text-slate-800">Rs. {(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr</span>
+                  <span className="font-bold text-slate-800">{formatIndianCurrencyCr(criteria?.minAverageAnnualTurnoverCr)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Bidder Evaluated Average Turnover:</span>
-                  <span className="font-bold text-blue-700">Rs. {(activeBidder.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2)} Cr</span>
+                  <span className="font-bold text-blue-700">{formatIndianCurrencyCr(activeBidder.financialEvaluation?.averageTurnoverCr)}</span>
                 </div>
               </div>
 
@@ -1389,7 +1390,7 @@ B. SUMMARY OF BIDDER SCRUTINY:
                     {(activeBidder.financialEvaluation?.claimedTurnoverByYear || []).map((row, rIdx) => (
                       <tr key={rIdx} className="border-b border-slate-100">
                         <td className="p-2 font-medium">{row.year}</td>
-                        <td className="p-2 font-mono font-bold text-slate-800">{(row.turnoverCr ?? 0).toFixed(2)}</td>
+                        <td className="p-2 font-mono font-bold text-slate-800">{formatIndianCurrencyCr(row.turnoverCr, { compact: true })}</td>
                         <td className="p-2 text-emerald-600">Yes (Audited)</td>
                         <td className="p-2">
                           {row.caUdinPresent ? (
@@ -2737,7 +2738,7 @@ B. SUMMARY OF BIDDER SCRUTINY:
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900 space-y-1">
               <div className="flex justify-between font-semibold">
                 <span>Tendered Mandatory Average Turnover (Last 3 FYs):</span>
-                <span className="font-bold text-blue-800">Rs. {(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr</span>
+                <span className="font-bold text-blue-800">{formatIndianCurrencyCr(criteria?.minAverageAnnualTurnoverCr)}</span>
               </div>
               <p className="text-[11px] text-blue-700">
                 Enter or correct the audited annual turnover figures extracted from the Chartered Accountant certificate or balance sheets. Average is automatically calculated live.
@@ -2775,7 +2776,7 @@ B. SUMMARY OF BIDDER SCRUTINY:
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
-                            step="0.01"
+                            step="0.0001"
                             min="0"
                             value={row.turnoverCr}
                             onChange={(e) => {
@@ -2788,6 +2789,11 @@ B. SUMMARY OF BIDDER SCRUTINY:
                           />
                           <span className="text-[11px] text-slate-500 font-semibold">Cr</span>
                         </div>
+                        {row.turnoverCr > 0 && row.turnoverCr < 1 && (
+                          <div className="text-[10px] text-slate-500 mt-0.5 font-sans">
+                            ≈ {formatIndianCurrencyCr(row.turnoverCr, { compact: true })}
+                          </div>
+                        )}
                       </td>
                       <td className="p-2 text-center">
                         <input
@@ -2839,12 +2845,12 @@ B. SUMMARY OF BIDDER SCRUTINY:
                 {(() => {
                   const valid = editableTurnoverRows.filter((r) => r.year.trim().length > 0);
                   const sum = valid.reduce((acc, r) => acc + (Number(r.turnoverCr) || 0), 0);
-                  const avg = valid.length > 0 ? parseFloat((sum / valid.length).toFixed(2)) : 0;
+                  const avg = valid.length > 0 ? parseFloat((sum / valid.length).toFixed(6)) : 0;
                   const req = criteria?.minAverageAnnualTurnoverCr ?? 0;
                   const meets = avg >= req && avg > 0;
                   return (
                     <div className="flex items-center gap-3 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 text-xs">
-                      <span>Evaluated Average: <strong className="font-mono text-slate-900">Rs. {avg.toFixed(2)} Cr</strong></span>
+                      <span>Evaluated Average: <strong className="font-mono text-slate-900">{formatIndianCurrencyCr(avg)}</strong></span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${meets ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
                         {meets ? "✓ MEETS THRESHOLD" : "✗ BELOW THRESHOLD"}
                       </span>

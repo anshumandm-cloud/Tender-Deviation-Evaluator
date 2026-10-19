@@ -27,7 +27,6 @@ interface ComparativeTabProps {
   metadata?: TenderMetadata;
   officerDirectives?: OfficerDirective[];
   activeFormatTemplate?: UploadedFormatTemplate | null;
-  onOpenChatbot?: () => void;
   onReRunAnalysis?: () => void;
 }
 
@@ -37,7 +36,6 @@ export const ComparativeTab: React.FC<ComparativeTabProps> = ({
   metadata,
   officerDirectives = [],
   activeFormatTemplate,
-  onOpenChatbot,
   onReRunAnalysis,
 }) => {
   const [viewMode, setViewMode] = useState<"consolidated-grid" | "thematic" | "committee">("consolidated-grid");
@@ -159,14 +157,6 @@ export const ComparativeTab: React.FC<ComparativeTabProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {onOpenChatbot && (
-              <button
-                onClick={onOpenChatbot}
-                className="text-xs bg-white hover:bg-slate-50 text-indigo-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs transition-colors cursor-pointer"
-              >
-                Chatbot Advisor
-              </button>
-            )}
             {onReRunAnalysis && (
               <button
                 onClick={onReRunAnalysis}

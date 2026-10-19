@@ -4,7 +4,6 @@ import {
   Layers,
   Scale,
   Sparkles,
-  Bot,
   CheckCircle,
   AlertCircle,
   Download,
@@ -21,7 +20,6 @@ import { TenderSetupTab } from "./components/TenderSetupTab";
 import { SingleBidderTab } from "./components/SingleBidderTab";
 import { ComparativeTab } from "./components/ComparativeTab";
 import { HarmonizedClausesTab } from "./components/HarmonizedClausesTab";
-import { ContractChatbotTab } from "./components/ContractChatbotTab";
 import { AuditTrailTab } from "./components/AuditTrailTab";
 import { OfflineDesktopModal } from "./components/OfflineDesktopModal";
 import { KnowMeModal } from "./components/KnowMeModal";
@@ -80,7 +78,7 @@ import { triggerFileDownload, exportComprehensiveEvaluationToPDF } from "./utils
 export default function App() {
   // Navigation - default opening tab is Services (O&M)
   const [activeTab, setActiveTab] = useState<
-    "setup" | "single" | "comparative" | "harmonized" | "service_eval" | "chat" | "audit"
+    "setup" | "single" | "comparative" | "harmonized" | "service_eval" | "audit"
   >("comparative");
 
   // Tender Setup States - Default to Services (O&M)
@@ -1063,22 +1061,6 @@ export default function App() {
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
             </button>
 
-            {/* Tab: Dealing Officer AI Chatbot */}
-            <button
-              onClick={() => setActiveTab("chat")}
-              className={`px-3.5 py-2 text-xs font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shrink-0 ${
-                activeTab === "chat"
-                  ? "bg-slate-900 text-white shadow-2xs font-bold"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-              }`}
-            >
-              <Bot className="w-4 h-4 text-amber-400" />
-              <span>Dealing Officer Chatbot</span>
-              <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded-full">
-                Persistent
-              </span>
-            </button>
-
             {/* Tab: Audit Trail & Statutory Log */}
             <button
               id="nav-tab-audit"
@@ -1191,7 +1173,6 @@ export default function App() {
             metadata={metadata}
             officerDirectives={officerDirectives}
             activeFormatTemplate={activeFormatTemplate}
-            onOpenChatbot={() => setActiveTab("chat")}
             onReRunAnalysis={() => handleRunEvaluation()}
           />
         )}
@@ -1205,47 +1186,11 @@ export default function App() {
             isGenerating={isGeneratingHarmonized}
             officerDirectives={officerDirectives}
             activeFormatTemplate={activeFormatTemplate}
-            onOpenChatbot={() => setActiveTab("chat")}
             onReRunAnalysis={() => handleRunEvaluation()}
           />
         )}
 
-        {/* Tab 5: Dealing Officer AI Chatbot */}
-        {activeTab === "chat" && (
-          <ContractChatbotTab
-            metadata={metadata}
-            sbdSummary={documents.sbdText}
-            nitSummary={documents.nitText}
-            biddersInfo={bidders.map((b) => ({
-              name: b.name,
-              deviationPreview: b.deviationFileText,
-            }))}
-            officerDirectives={officerDirectives}
-            onAddDirective={handleAddDirective}
-            onRemoveDirective={handleRemoveDirective}
-            onToggleDirective={handleToggleDirective}
-            onApplyDirectiveToOutput={handleApplyDirectiveToOutput}
-            activeFormatTemplate={activeFormatTemplate}
-            onSelectFormatTemplate={handleSelectFormatTemplate}
-            onClearFormatTemplate={handleClearFormatTemplate}
-            onReRunAnalysis={() => handleRunEvaluation()}
-            isReRunningAnalysis={isEvaluating}
-            onNavigateToTab={(tab) => {
-              if (
-                tab === "setup" ||
-                tab === "single" ||
-                tab === "comparative" ||
-                tab === "harmonized" ||
-                tab === "chat" ||
-                tab === "audit"
-              ) {
-                setActiveTab(tab);
-              }
-            }}
-          />
-        )}
-
-        {/* Tab 6: Audit Trail & Compliance Log */}
+        {/* Tab 5: Audit Trail & Compliance Log */}
         {activeTab === "audit" && (
           <AuditTrailTab
             auditLogs={auditLogs}

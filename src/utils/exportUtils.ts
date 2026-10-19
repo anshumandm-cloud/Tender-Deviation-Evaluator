@@ -16,6 +16,7 @@ import {
 } from "docx";
 import { SingleBidderEvaluation, ComparativeEvaluation, ReviewedClausesData, TenderMetadata, AuditLogEntry, UploadedFormatTemplate } from "../types";
 import { BidderServiceSubmission, ServiceCriteriaRequirement } from "../types/serviceEvaluation";
+import { formatIndianCurrencyCr } from "./currencyFormatter";
 
 /**
  * Downloads a file to the user's PC
@@ -2782,7 +2783,7 @@ export function exportServiceEvaluationToExcel(
     [formatTitle ? `FORMAT TEMPLATE: ${formatTitle}` : "FORMAT: Standard GFR 2017 & Open Tender Matrix"],
     [""],
     ["A. NIT ELIGIBILITY CRITERIA BENCHMARKS:"],
-    ["1. Financial Turnover Benchmark", `Minimum Average Annual Turnover of Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr in last 3 FYs with CA UDIN`],
+    ["1. Financial Turnover Benchmark", `Minimum Average Annual Turnover of ${formatIndianCurrencyCr(criteria?.minAverageAnnualTurnoverCr)} in last 3 FYs with CA UDIN`],
     ["2. Experience Threshold (Single Work)", `At least 1 similar work >= Rs. ${(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr`],
     ["3. Experience Threshold (Two Works)", `At least 2 similar works >= Rs. ${(criteria?.twoWorkOrdersValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.5).toFixed(2)} Cr each`],
     ["4. Experience Threshold (Three Works)", `At least 3 similar works >= Rs. ${(criteria?.threeWorkOrdersValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.4).toFixed(2)} Cr each`],
@@ -3039,7 +3040,7 @@ export async function exportServiceEvaluationToDocx(
             children: [
               new TextRun({ text: "• Financial Criteria: ", bold: true }),
               new TextRun({
-                text: `Minimum Average Annual Turnover of Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Crores during the last 3 financial years duly certified by a Chartered Accountant with valid Unique Document Identification Number (UDIN).\n`,
+                text: `Minimum Average Annual Turnover of ${formatIndianCurrencyCr(criteria?.minAverageAnnualTurnoverCr)} during the last 3 financial years duly certified by a Chartered Accountant with valid Unique Document Identification Number (UDIN).\n`,
               }),
               new TextRun({ text: "• Technical Experience: ", bold: true }),
               new TextRun({
@@ -3111,7 +3112,7 @@ export function generateServiceEvaluationCustomText(
     const scopeMatch = works.some((w) => w.matchesSimilarWorkScope) ? "Complied" : "Deviated";
     const udinStatus = (b.financialEvaluation?.claimedTurnoverByYear || []).some((t) => t.caUdinPresent) ? "Valid" : "Missing";
 
-    tableStr += `| ${idx + 1} | ${b.bidderName} | ${b.overallStatus} | Rs. ${(b.financialEvaluation?.averageTurnoverCr ?? 0).toFixed(2)} Cr | Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr | ${udinStatus} | Rs. ${maxWorkVal.toFixed(2)} Cr | ${scopeMatch} | ${b.summaryReason} |\n`;
+    tableStr += `| ${idx + 1} | ${b.bidderName} | ${b.overallStatus} | ${formatIndianCurrencyCr(b.financialEvaluation?.averageTurnoverCr)} | ${formatIndianCurrencyCr(criteria?.minAverageAnnualTurnoverCr)} | ${udinStatus} | Rs. ${maxWorkVal.toFixed(2)} Cr | ${scopeMatch} | ${b.summaryReason} |\n`;
   });
 
   if (templateText && templateText.trim().length > 50) {
@@ -3121,7 +3122,7 @@ export function generateServiceEvaluationCustomText(
     populated = populated.replace(/\[REF_NO\]/gi, refNo);
     populated = populated.replace(/\[DATE\]/gi, dateStr);
     populated = populated.replace(/\[EVALUATION_DATE\]/gi, dateStr);
-    populated = populated.replace(/\[MIN_TURNOVER\]/gi, `Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Cr`);
+    populated = populated.replace(/\[MIN_TURNOVER\]/gi, formatIndianCurrencyCr(criteria?.minAverageAnnualTurnoverCr));
     populated = populated.replace(/\[SIMILAR_WORK\]/gi, criteria?.similarWorkDefinition || "Similar Works");
     populated = populated.replace(/\[QUALIFIED_BIDDERS\]/gi, qualifiedList);
     populated = populated.replace(/\[SHORTFALL_BIDDERS\]/gi, shortfallList);
@@ -3142,7 +3143,7 @@ TENDER REFERENCE: ${refNo} | DATE: ${dateStr}
 REGULATORY BENCHMARK: General Financial Rules (GFR) 2017 Rule 173 & CVC Manual
 
 1. NIT QUALIFYING CRITERIA SPECIFICATION:
-- Minimum Average Annual Turnover: Rs. ${(criteria?.minAverageAnnualTurnoverCr ?? 0).toFixed(2)} Crores (last 3 FYs with CA UDIN)
+- Minimum Average Annual Turnover: ${formatIndianCurrencyCr(criteria?.minAverageAnnualTurnoverCr)} (last 3 FYs with CA UDIN)
 - Technical Experience (Completed Similar Works Threshold):
   * Single Work >= Rs. ${(criteria?.singleWorkOrderValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.8).toFixed(2)} Cr
   * Two Works >= Rs. ${(criteria?.twoWorkOrdersValueCr || (criteria?.minAverageAnnualTurnoverCr ?? 0) * 0.5).toFixed(2)} Cr each

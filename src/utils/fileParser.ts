@@ -4,6 +4,7 @@ import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import * as XLSX from "xlsx";
 import mammoth from "mammoth";
 import { performBrowserImageOcr } from "./ocrAndTamperAnalyzer";
+import { parseCurrencyAmountToCrores, formatIndianCurrencyCr } from "./currencyFormatter";
 
 // Set pdfjs worker source to local bundled worker
 if (typeof window !== "undefined") {
@@ -617,25 +618,44 @@ export function extractEligibilityCriteriaFromText(
   });
 
   // Targeted parsing for TURNOVER fields
-  // Check for turnover value: e.g. "turnover of Rs. 15.5 Cr" or "15.5 Crore" or "₹ 15 Cr" or "Rs 1,500 Lakhs" or "Rs 15,00,00,000"
-  const turnoverRegex = /(?:turnover|annual turnover|average annual turnover)[^.\n]{0,90}?(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|crore)?/i;
-  const turnoverMatch = text.match(turnoverRegex);
-  if (turnoverMatch && turnoverMatch[1]) {
-    const rawNum = turnoverMatch[1].replace(/[^\d.]/g, "");
-    const val = parseFloat(rawNum);
-    const unit = turnoverMatch[2]?.toLowerCase() || "";
-    let finalValCr = val;
-    if (unit.startsWith("lakh") || unit.startsWith("lac")) {
-      finalValCr = parseFloat((val / 100).toFixed(2));
-    } else if (val >= 10000000) {
-      finalValCr = parseFloat((val / 10000000).toFixed(2));
-    } else {
-      finalValCr = parseFloat(val.toFixed(2));
+  // Check for turnover value: e.g. "turnover of Rs. 15.5 Cr", "Rs 0.30 lakhs", "Rs 30 thousand", "Rs. 30,000/-"
+  let parsedTurnoverCr: number | null = null;
+  let matchedTurnoverPhrase = "";
+
+  // 1A. Check for percentage of estimated cost / tender value (e.g. "30% of estimated cost of Rs 10 Lakhs")
+  const pctTurnoverMatch = text.match(/(?:turnover|annual turnover|average annual turnover)[^.\n]{0,120}?([0-9]+(?:\.[0-9]+)?\s*%\s*(?:of)?\s*(?:(?:estimated\s+cost|tender\s+value|value|estimate|cost)\s*(?:of)?\s*)?(?:(?:rs\.?|inr|₹)\s*)?[0-9,.]+\s*(?:cr(?:ores?)?|lakhs?|lacs?|thousands?|k)?)/i);
+  if (pctTurnoverMatch && pctTurnoverMatch[1]) {
+    const val = parseCurrencyAmountToCrores(pctTurnoverMatch[1]);
+    if (val !== null && val > 0) {
+      parsedTurnoverCr = val;
+      matchedTurnoverPhrase = pctTurnoverMatch[0].trim();
     }
-    if (finalValCr > 0) {
-      suggestedCriteria.minAverageAnnualTurnoverCr = finalValCr;
-      summaryFindings.push(`Found Minimum Turnover requirement: ₹ ${finalValCr} Crore (${turnoverMatch[0].trim()})`);
+  }
+
+  // 1B. Direct monetary match for turnover, strictly ignoring year counts (e.g. negative lookahead for "years")
+  if (parsedTurnoverCr === null) {
+    const directTurnoverRegex = /(?:turnover|annual turnover|average annual turnover)[^.\n]{0,120}?(?:(?:not\s+less\s+than|at\s+least|minimum(?:\s+of)?|shall\s+be|is)\s*)?(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|thousands?|k|\/\-)?(?!\s*(?:financial\s*)?years?|\s*fys?|\s*months?)/i;
+    const directMatch = text.match(directTurnoverRegex);
+    if (directMatch && directMatch[1]) {
+      const numStr = directMatch[1];
+      const unitStr = directMatch[2] || "";
+      const phrase = directMatch[0];
+      // Only accept if preceded by currency symbol, followed by currency unit, or raw INR >= 1000
+      const hasCurrencyIndicator = /(?:INR|Rs\.?|₹)/i.test(phrase) || unitStr.length > 0 || parseFloat(numStr.replace(/,/g, "")) >= 1000;
+      if (hasCurrencyIndicator) {
+        const fullToken = `${numStr} ${unitStr}`.trim();
+        const val = parseCurrencyAmountToCrores(fullToken);
+        if (val !== null && val > 0) {
+          parsedTurnoverCr = val;
+          matchedTurnoverPhrase = phrase.trim();
+        }
+      }
     }
+  }
+
+  if (parsedTurnoverCr !== null && parsedTurnoverCr > 0) {
+    suggestedCriteria.minAverageAnnualTurnoverCr = parsedTurnoverCr;
+    summaryFindings.push(`Found Minimum Turnover requirement: ${formatIndianCurrencyCr(parsedTurnoverCr)} (${matchedTurnoverPhrase})`);
   }
 
   // Check turnover years: e.g. "last 3 financial years", "past 3 years", "last 5 years"
@@ -676,47 +696,35 @@ export function extractEligibilityCriteriaFromText(
     }
   }
 
-  // Check for 80% / 50% / 40% work order values or specific Cr amounts (with comma numbers)
-  const singleWorkMatch = text.match(/(?:one|1|single)\s+(?:completed\s+)?(?:similar\s+)?work(?:\s+order)?(?:\s+costing|\s+valued\s+at|\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|crore)?/i);
+  // Check for 80% / 50% / 40% work order values or specific amounts (with comma numbers, Lakhs, Crores, Thousands)
+  const singleWorkMatch = text.match(/(?:one|1|single)\s+(?:completed\s+)?(?:similar\s+)?work(?:\s+order)?(?:\s+costing|\s+valued\s+at|\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|thousands?|k|\/\-)?(?!\s*years?)/i);
   if (singleWorkMatch && singleWorkMatch[1]) {
-    const rawNum = singleWorkMatch[1].replace(/[^\d.]/g, "");
-    const val = parseFloat(rawNum);
-    const unit = singleWorkMatch[2]?.toLowerCase() || "";
-    let finalVal = val;
-    if (unit.startsWith("lakh") || unit.startsWith("lac")) finalVal = parseFloat((val / 100).toFixed(2));
-    else if (val >= 10000000) finalVal = parseFloat((val / 10000000).toFixed(2));
-    if (finalVal > 0) suggestedCriteria.singleWorkOrderValueCr = finalVal;
+    const fullToken = `${singleWorkMatch[1]} ${singleWorkMatch[2] || ""}`.trim();
+    const finalVal = parseCurrencyAmountToCrores(fullToken);
+    if (finalVal !== null && finalVal > 0) suggestedCriteria.singleWorkOrderValueCr = finalVal;
   } else if (suggestedCriteria.minAverageAnnualTurnoverCr > 0) {
     // GFR / PSU standard benchmark: Single work order 80% of estimate / turnover
-    suggestedCriteria.singleWorkOrderValueCr = parseFloat((suggestedCriteria.minAverageAnnualTurnoverCr * 0.8).toFixed(2));
+    suggestedCriteria.singleWorkOrderValueCr = parseFloat((suggestedCriteria.minAverageAnnualTurnoverCr * 0.8).toFixed(6));
   }
 
-  const twoWorksMatch = text.match(/(?:two|2)\s+(?:completed\s+)?(?:similar\s+)?works?(?:\s+orders?)?(?:\s+costing|\s+valued\s+at|\s+each\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|crore)?/i);
+  const twoWorksMatch = text.match(/(?:two|2)\s+(?:completed\s+)?(?:similar\s+)?works?(?:\s+orders?)?(?:\s+costing|\s+valued\s+at|\s+each\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|thousands?|k|\/\-)?(?!\s*years?)/i);
   if (twoWorksMatch && twoWorksMatch[1]) {
-    const rawNum = twoWorksMatch[1].replace(/[^\d.]/g, "");
-    const val = parseFloat(rawNum);
-    const unit = twoWorksMatch[2]?.toLowerCase() || "";
-    let finalVal = val;
-    if (unit.startsWith("lakh") || unit.startsWith("lac")) finalVal = parseFloat((val / 100).toFixed(2));
-    else if (val >= 10000000) finalVal = parseFloat((val / 10000000).toFixed(2));
-    if (finalVal > 0) suggestedCriteria.twoWorkOrdersValueCr = finalVal;
+    const fullToken = `${twoWorksMatch[1]} ${twoWorksMatch[2] || ""}`.trim();
+    const finalVal = parseCurrencyAmountToCrores(fullToken);
+    if (finalVal !== null && finalVal > 0) suggestedCriteria.twoWorkOrdersValueCr = finalVal;
   } else if (suggestedCriteria.minAverageAnnualTurnoverCr > 0) {
     // 50% threshold
-    suggestedCriteria.twoWorkOrdersValueCr = parseFloat((suggestedCriteria.minAverageAnnualTurnoverCr * 0.5).toFixed(2));
+    suggestedCriteria.twoWorkOrdersValueCr = parseFloat((suggestedCriteria.minAverageAnnualTurnoverCr * 0.5).toFixed(6));
   }
 
-  const threeWorksMatch = text.match(/(?:three|3)\s+(?:completed\s+)?(?:similar\s+)?works?(?:\s+orders?)?(?:\s+costing|\s+valued\s+at|\s+each\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|crore)?/i);
+  const threeWorksMatch = text.match(/(?:three|3)\s+(?:completed\s+)?(?:similar\s+)?works?(?:\s+orders?)?(?:\s+costing|\s+valued\s+at|\s+each\s+of)?\s*(?:not\s+less\s+than)?\s*(?:(?:INR|Rs\.?|₹)\s*)?([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?|[0-9]+(?:\.[0-9]+)?)\s*(cr(?:ores?)?|lakhs?|lacs?|thousands?|k|\/\-)?(?!\s*years?)/i);
   if (threeWorksMatch && threeWorksMatch[1]) {
-    const rawNum = threeWorksMatch[1].replace(/[^\d.]/g, "");
-    const val = parseFloat(rawNum);
-    const unit = threeWorksMatch[2]?.toLowerCase() || "";
-    let finalVal = val;
-    if (unit.startsWith("lakh") || unit.startsWith("lac")) finalVal = parseFloat((val / 100).toFixed(2));
-    else if (val >= 10000000) finalVal = parseFloat((val / 10000000).toFixed(2));
-    if (finalVal > 0) suggestedCriteria.threeWorkOrdersValueCr = finalVal;
+    const fullToken = `${threeWorksMatch[1]} ${threeWorksMatch[2] || ""}`.trim();
+    const finalVal = parseCurrencyAmountToCrores(fullToken);
+    if (finalVal !== null && finalVal > 0) suggestedCriteria.threeWorkOrdersValueCr = finalVal;
   } else if (suggestedCriteria.minAverageAnnualTurnoverCr > 0) {
     // 40% threshold
-    suggestedCriteria.threeWorkOrdersValueCr = parseFloat((suggestedCriteria.minAverageAnnualTurnoverCr * 0.4).toFixed(2));
+    suggestedCriteria.threeWorkOrdersValueCr = parseFloat((suggestedCriteria.minAverageAnnualTurnoverCr * 0.4).toFixed(6));
   }
 
   // Prior experience period: e.g. "during the last 7 years"

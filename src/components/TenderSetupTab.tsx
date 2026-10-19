@@ -40,6 +40,7 @@ import {
   EligibilityExtractionResult,
 } from "../utils/fileParser";
 import { ServiceCriteriaRequirement } from "../types/serviceEvaluation";
+import { formatIndianCurrencyCr } from "../utils/currencyFormatter";
 
 interface TenderSetupTabProps {
   metadata: TenderMetadata;
@@ -1220,7 +1221,7 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
               </div>
               <div className="mt-3 pt-2 border-t border-amber-200/60">
                 <div className="text-base font-extrabold text-amber-950 font-mono">
-                  ₹ {activeServiceCriteria.minAverageAnnualTurnoverCr} Cr
+                  {formatIndianCurrencyCr(activeServiceCriteria.minAverageAnnualTurnoverCr, { compact: true })}
                 </div>
                 <div className="text-[10px] text-amber-800 font-medium">
                   Last {activeServiceCriteria.turnoverYearsCount} Financial Years
@@ -1426,12 +1427,17 @@ export const TenderSetupTab: React.FC<TenderSetupTabProps> = ({
                     </label>
                     <input
                       type="number"
-                      step="0.1"
+                      step="0.0001"
                       min="0"
                       value={activeServiceCriteria.minAverageAnnualTurnoverCr}
                       onChange={(e) => handleUpdateServiceCriteriaField("minAverageAnnualTurnoverCr", parseFloat(e.target.value) || 0)}
                       className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white font-mono font-bold text-slate-900 focus:outline-blue-500"
                     />
+                    {activeServiceCriteria.minAverageAnnualTurnoverCr > 0 && activeServiceCriteria.minAverageAnnualTurnoverCr < 1 && (
+                      <span className="text-[10px] text-slate-500 mt-0.5 block">
+                        ≈ {formatIndianCurrencyCr(activeServiceCriteria.minAverageAnnualTurnoverCr)}
+                      </span>
+                    )}
                   </div>
 
                   <div>

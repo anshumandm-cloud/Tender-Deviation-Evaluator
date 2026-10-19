@@ -99,7 +99,6 @@ interface HarmonizedClausesTabProps {
   isGenerating: boolean;
   officerDirectives?: OfficerDirective[];
   activeFormatTemplate?: UploadedFormatTemplate | null;
-  onOpenChatbot?: () => void;
   onReRunAnalysis?: () => void;
 }
 
@@ -111,7 +110,6 @@ export const HarmonizedClausesTab: React.FC<HarmonizedClausesTabProps> = ({
   isGenerating,
   officerDirectives = [],
   activeFormatTemplate,
-  onOpenChatbot,
   onReRunAnalysis,
 }) => {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -342,14 +340,6 @@ export const HarmonizedClausesTab: React.FC<HarmonizedClausesTabProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {onOpenChatbot && (
-              <button
-                onClick={onOpenChatbot}
-                className="text-xs bg-white hover:bg-slate-50 text-blue-700 font-semibold px-3 py-1.5 rounded-lg border border-slate-200 shadow-2xs transition-colors cursor-pointer"
-              >
-                Chatbot Advisor
-              </button>
-            )}
             {onReRunAnalysis && (
               <button
                 onClick={onReRunAnalysis}

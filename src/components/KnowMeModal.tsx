@@ -7,7 +7,6 @@ import {
   Layers,
   Scale,
   Sparkles,
-  Bot,
   History,
   CheckCircle2,
   HardDrive,
@@ -458,22 +457,12 @@ DATA PRIVACY & VIGILANCE SECURITY MANDATE
                 </div>
               </div>
 
-              {/* Tab 5 & 6 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                  <div className="flex items-center gap-2 text-slate-900 font-bold">
-                    <Bot className="w-4 h-4 text-amber-500" />
-                    <span>Tab 5: Dealing Officer Chatbot</span>
-                  </div>
-                  <p className="text-slate-600">
-                    Ask specific questions about tender clauses, legal precedents, or request counter-clauses. Add <em>Officer Directives</em> (e.g. "Do not compromise on 10% LD ceiling") that dynamically steer the addendum formulation.
-                  </p>
-                </div>
-
+              {/* Tab 5 */}
+              <div className="grid grid-cols-1 gap-3 text-xs">
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                   <div className="flex items-center gap-2 text-slate-900 font-bold">
                     <History className="w-4 h-4 text-emerald-600" />
-                    <span>Tab 6: Statutory Audit Trail</span>
+                    <span>Tab 5: Statutory Audit Trail</span>
                   </div>
                   <p className="text-slate-600">
                     Real-time tamper-evident log capturing every action with timestamp, Dealing Officer signature, affected clause, and statutory compliance tags (GFR Rule 173, CVC Guidelines) for internal audit review.
